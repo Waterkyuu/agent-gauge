@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a reproducible AgentGauge problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Remove prompts, tokens, repository paths, command arguments, and other sensitive data before
+        submitting logs or screenshots.
+
+  - type: input
+    id: version
+    attributes:
+      label: AgentGauge version
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: agent
+    attributes:
+      label: Monitored Agent and version
+      placeholder: Codex, Claude Code, or another Agent
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable sequence that reproduces the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      render: shell
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed sensitive prompts, tokens, paths, command arguments, and repository data.
+          required: true
