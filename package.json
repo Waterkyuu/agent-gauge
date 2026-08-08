@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "tsc && vite build",
+		"build": "pnpm typecheck && vite build",
 		"check": "biome check .",
 		"check:fix": "biome check --write .",
 		"format": "biome format .",
@@ -15,7 +15,7 @@
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
 		"test:watch": "vitest",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
 		"tauri": "tauri"
 	},
 	"dependencies": {

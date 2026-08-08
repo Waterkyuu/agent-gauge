@@ -1,6 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -27,17 +27,6 @@ export default defineConfig(async () => ({
 		watch: {
 			// 3. tell Vite to ignore watching `src-tauri`
 			ignored: ["**/src-tauri/**"],
-		},
-	},
-	test: {
-		css: true,
-		environment: "jsdom",
-		setupFiles: ["./src/test-setup.ts"],
-		coverage: {
-			provider: "v8",
-			reporter: ["text", "html"],
-			include: ["src/**/*.{ts,tsx}"],
-			exclude: ["src/main.tsx", "src/test-setup.ts", "src/vite-env.d.ts"],
 		},
 	},
 }));
