@@ -8,8 +8,14 @@
 		"build": "tsc && vite build",
 		"check": "biome check .",
 		"check:fix": "biome check --write .",
-		"format": "biome format --write .",
+		"format": "biome format .",
+		"format:fix": "biome format --write .",
+		"lint": "biome lint .",
 		"preview": "vite preview",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit",
 		"tauri": "tauri"
 	},
 	"dependencies": {
@@ -24,11 +30,18 @@
 		"@biomejs/biome": "2.5.7",
 		"@tailwindcss/vite": "^4.3.3",
 		"@tauri-apps/cli": "^2",
+		"@testing-library/jest-dom": "^7.0.0",
+		"@testing-library/react": "^16.3.2",
+		"@testing-library/user-event": "^14.6.3",
+		"@types/node": "^26.1.2",
 		"@types/react": "^19.1.8",
 		"@types/react-dom": "^19.1.6",
 		"@vitejs/plugin-react": "^4.6.0",
+		"@vitest/coverage-v8": "^4.1.10",
+		"jsdom": "^30.0.1",
 		"tailwindcss": "^4.3.3",
 		"typescript": "~5.8.3",
-		"vite": "^7.0.4"
+		"vite": "^7.0.4",
+		"vitest": "^4.1.10"
 	}
 }
