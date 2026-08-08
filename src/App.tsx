@@ -25,8 +25,8 @@ function App() {
 					Measure where your agents spend their time.
 				</h1>
 				<p className="mt-6 max-w-2xl text-pretty text-lg leading-8 text-slate-300">
-					Agent Speed will compare local Codex, Claude Code, and other agent
-					runs with one consistent timeline and metric model.
+					AgentGauge will compare local Codex, Claude Code, and other agent runs
+					with one consistent timeline and metric model.
 				</p>
 
 				<div className="mt-10 flex flex-wrap items-center gap-3">

@@ -1,8 +1,8 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "Agent Speed",
+	"productName": "AgentGauge",
 	"version": "0.1.0",
-  "identifier": "com.agentspeed.desktop",
+	"identifier": "com.agentgauge.desktop",
 	"build": {
 		"beforeDevCommand": "pnpm dev",
 		"devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
 	"app": {
 		"windows": [
 			{
-				"title": "Agent Speed",
+				"title": "AgentGauge",
 				"width": 1120,
 				"height": 720,
 				"minWidth": 840,

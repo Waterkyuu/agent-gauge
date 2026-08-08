@@ -1,4 +1,4 @@
-# Agent Speed
+# AgentGauge
 
 Desktop scaffold for measuring and comparing local AI agent performance.
 
