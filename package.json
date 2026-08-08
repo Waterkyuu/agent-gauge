@@ -1,5 +1,5 @@
 {
-	"name": "agent-speed",
+	"name": "agent-gauge",
 	"private": true,
 	"version": "0.1.0",
 	"type": "module",
