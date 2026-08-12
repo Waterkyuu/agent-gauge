@@ -7,6 +7,10 @@ type CodexLoginStatus = {
 	loggedIn: boolean;
 	/** Safe authentication mode reported by Codex. */
 	authenticationMethod: string | null;
+	/** Effective model selected for new local Codex tasks. */
+	model: string | null;
+	/** Effective reasoning effort selected for new local Codex tasks. */
+	reasoningEffort: string | null;
 };
 
 type TokenUsage = {

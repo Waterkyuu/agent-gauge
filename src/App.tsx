@@ -22,6 +22,19 @@ const formatDuration = (milliseconds: number) => {
 	return `${(milliseconds / 1000).toFixed(2)} s`;
 };
 
+/** Localizes a known Codex reasoning level while retaining its wire value. Example: `formatReasoningEffort("high")` returns `高 (high)`. */
+const formatReasoningEffort = (effort: string | null) => {
+	if (!effort) {
+		return ZH_CN.metricUnavailable;
+	}
+
+	const localized =
+		ZH_CN.reasoningEffortLevels[
+			effort as keyof typeof ZH_CN.reasoningEffortLevels
+		];
+	return localized ? `${localized} (${effort})` : effort;
+};
+
 /** Renders the MVP query composer and completed Codex metrics. Example: `<App />`. */
 const App = () => {
 	const [loginState, setLoginState] = useState<LoginState>({
@@ -102,6 +115,27 @@ const App = () => {
 					<p className="mt-4 max-w-2xl leading-7 text-slate-400">
 						{ZH_CN.description}
 					</p>
+					{isReady ? (
+						<dl
+							aria-label={ZH_CN.runtimeConfiguration}
+							className="mt-5 grid gap-3 sm:grid-cols-2"
+						>
+							<div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+								<dt className="text-xs text-slate-500">{ZH_CN.currentModel}</dt>
+								<dd className="mt-1 font-medium text-slate-100">
+									{loginState.value.model ?? ZH_CN.metricUnavailable}
+								</dd>
+							</div>
+							<div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+								<dt className="text-xs text-slate-500">
+									{ZH_CN.reasoningEffort}
+								</dt>
+								<dd className="mt-1 font-medium text-slate-100">
+									{formatReasoningEffort(loginState.value.reasoningEffort)}
+								</dd>
+							</div>
+						</dl>
+					) : null}
 				</header>
 
 				<form

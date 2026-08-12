@@ -21,11 +21,15 @@ describe("App", () => {
 			installed: true,
 			loggedIn: true,
 			authenticationMethod: "ChatGPT",
+			model: "gpt-5.6-sol",
+			reasoningEffort: "high",
 		});
 
 		render(<App />);
 
 		expect(await screen.findByText("已通过 ChatGPT 登录")).toBeInTheDocument();
+		expect(screen.getByText("gpt-5.6-sol")).toBeInTheDocument();
+		expect(screen.getByText("高 (high)")).toBeInTheDocument();
 		expect(screen.getByLabelText("任务内容")).toBeEnabled();
 	});
 
@@ -36,6 +40,8 @@ describe("App", () => {
 				installed: true,
 				loggedIn: true,
 				authenticationMethod: "ChatGPT",
+				model: "gpt-5.6-sol",
+				reasoningEffort: "high",
 			})
 			.mockResolvedValueOnce({
 				response: "任务完成",

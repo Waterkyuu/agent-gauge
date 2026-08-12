@@ -14,6 +14,18 @@ const ZH_CN = {
 	loginCheckFailed: "无法检查本地 Codex 登录状态。",
 	/** Formats the safe local authentication mode. Example: `loggedIn("ChatGPT")`. */
 	loggedIn: (method: string) => `已通过 ${method} 登录`,
+	runtimeConfiguration: "当前 Codex 配置",
+	currentModel: "当前模型",
+	reasoningEffort: "思考强度",
+	reasoningEffortLevels: {
+		none: "无",
+		minimal: "最低",
+		low: "低",
+		medium: "中",
+		high: "高",
+		xhigh: "超高",
+		max: "最高",
+	},
 	metricsTitle: "本次运行",
 	firstToken: "首 token",
 	totalDuration: "总耗时",
