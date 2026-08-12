@@ -63,11 +63,10 @@ const zhCN = {
 		metricUnavailable: "不可用",
 		requestFailed: "任务执行失败，请重试。",
 		runBoard: {
-			eyebrow: "任务状态",
 			title: "Agent 运行看板",
 			description:
-				"按日期和状态追踪本地 Agent 任务，快速掌握正在执行、已完成和异常中断的工作。",
-			liveSync: "实时同步",
+				"按状态追踪本地 Agent 任务，查看正在执行、已完成和异常中断的工作。",
+			empty: "此状态下暂无任务。",
 			status: {
 				running: "Running",
 				finish: "Finish",

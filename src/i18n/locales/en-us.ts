@@ -64,11 +64,10 @@ const enUS = {
 		metricUnavailable: "Unavailable",
 		requestFailed: "The task failed. Please try again.",
 		runBoard: {
-			eyebrow: "Task status",
 			title: "Agent run board",
 			description:
-				"Track local agent tasks by date and status, from work in progress to completed and interrupted runs.",
-			liveSync: "Live sync",
+				"Track local agent tasks by status, from work in progress to completed and interrupted runs.",
+			empty: "No tasks in this status.",
 			status: {
 				running: "Running",
 				finish: "Finish",
