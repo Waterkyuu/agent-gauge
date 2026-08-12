@@ -21,10 +21,6 @@
 }
 
 @layer base {
-	* {
-		box-sizing: border-box;
-	}
-
 	html {
 		background: var(--app-canvas);
 		color: var(--app-ink);
@@ -35,14 +31,12 @@
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
-
 	body {
 		margin: 0;
 		min-width: 320px;
 		min-height: 100vh;
 		background: var(--app-canvas);
 	}
-
 	button,
 	input,
 	textarea,
