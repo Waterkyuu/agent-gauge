@@ -2,6 +2,7 @@ import { Button } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { checkClaudeLogin, runClaudeTask } from "./api/claude";
 import { checkCodexLogin, runCodexTask } from "./api/codex";
 import { checkWorkBuddyLogin, runWorkBuddyTask } from "./api/workbuddy";
 import type {
@@ -58,6 +59,7 @@ const App = () => {
 	const { t, i18n } = useTranslation();
 	const [selectedAgent, setSelectedAgent] = useState<AgentKind>("codex");
 	const [loginStates, setLoginStates] = useState<LoginStates>({
+		claude: { status: "checking" },
 		codex: { status: "checking" },
 		workbuddy: { status: "checking" },
 	});
@@ -67,6 +69,19 @@ const App = () => {
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 	useEffect(() => {
+		checkClaudeLogin()
+			.then((value) =>
+				setLoginStates((current) => ({
+					...current,
+					claude: { status: "resolved", value },
+				})),
+			)
+			.catch(() =>
+				setLoginStates((current) => ({
+					...current,
+					claude: { status: "failed" },
+				})),
+			);
 		checkCodexLogin()
 			.then((value) =>
 				setLoginStates((current) => ({
@@ -143,11 +158,13 @@ const App = () => {
 		setErrorMessage(null);
 		setResult(null);
 		try {
-			setResult(
-				await (selectedAgent === "codex"
-					? runCodexTask(query.trim())
-					: runWorkBuddyTask(query.trim())),
-			);
+			if (selectedAgent === "claude") {
+				setResult(await runClaudeTask(query.trim()));
+			} else if (selectedAgent === "codex") {
+				setResult(await runCodexTask(query.trim()));
+			} else {
+				setResult(await runWorkBuddyTask(query.trim()));
+			}
 		} catch (error) {
 			setErrorMessage(getErrorMessage(error, t("requestFailed")));
 		} finally {
@@ -219,7 +236,7 @@ const App = () => {
 						aria-label={t("agentSelection")}
 						className="mb-6 inline-flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1"
 					>
-						{(["codex", "workbuddy"] as const).map((agent) => (
+						{(["codex", "claude", "workbuddy"] as const).map((agent) => (
 							<button
 								aria-pressed={selectedAgent === agent}
 								className="rounded-lg px-4 py-2 text-sm text-slate-400 transition hover:text-white aria-pressed:bg-indigo-500 aria-pressed:text-white"

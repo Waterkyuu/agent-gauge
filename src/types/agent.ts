@@ -1,4 +1,4 @@
-type AgentKind = "codex" | "workbuddy";
+type AgentKind = "claude" | "codex" | "workbuddy";
 
 type AgentRuntimeStatus = {
 	/** Whether the local agent product was discovered. */

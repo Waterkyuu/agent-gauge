@@ -16,6 +16,15 @@ describe("App", () => {
 	beforeEach(() => {
 		invokeMock.mockReset();
 		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_claude_login") {
+				return Promise.resolve({
+					installed: true,
+					loggedIn: true,
+					authenticationMethod: "Claude account",
+					model: null,
+					reasoningEffort: null,
+				});
+			}
 			if (command === "check_codex_login") {
 				return Promise.resolve({
 					installed: true,
@@ -153,5 +162,53 @@ describe("App", () => {
 			});
 		});
 		expect(await screen.findByText("26,509")).toBeInTheDocument();
+	});
+
+	// Verifies that selecting Claude Code routes the query to its local runtime.
+	it("submits a query to Claude Code", async () => {
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "run_claude_task") {
+				return Promise.resolve({
+					response: "OK",
+					totalDurationMs: 3100,
+					timeToFirstTokenMs: 540,
+					tokenUsage: {
+						totalTokens: 2950,
+						inputTokens: 2920,
+						cachedInputTokens: 800,
+						cacheWriteInputTokens: 2000,
+						outputTokens: 30,
+						reasoningOutputTokens: null,
+					},
+				});
+			}
+			return Promise.resolve({
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "Claude account",
+				model: null,
+				reasoningEffort: null,
+			});
+		});
+		const user = userEvent.setup();
+
+		render(<App />);
+		await user.click(
+			await screen.findByRole("button", { name: "Claude Code" }),
+		);
+		await waitFor(() =>
+			expect(screen.getByLabelText("任务内容")).toBeEnabled(),
+		);
+		await user.type(screen.getByLabelText("任务内容"), "只回复 OK");
+		await user.click(
+			screen.getByRole("button", { name: "发送给 Claude Code" }),
+		);
+
+		await waitFor(() => {
+			expect(invokeMock).toHaveBeenLastCalledWith("run_claude_task", {
+				request: { query: "只回复 OK" },
+			});
+		});
+		expect(await screen.findByText("2,950")).toBeInTheDocument();
 	});
 });
