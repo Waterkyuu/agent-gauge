@@ -419,7 +419,7 @@ const ComparisonPage = () => {
 								value={query}
 								variant="secondary"
 							/>
-							<p className="mt-2 text-right font-mono text-[11px] text-[var(--app-faint)] tabular-nums">
+							<p className="mt-2 text-right font-mono text-[11px] text-[var(--app-muted)] tabular-nums">
 								{query.length.toLocaleString(numberLocale)} / 16,000
 							</p>
 						</Card.Content>
