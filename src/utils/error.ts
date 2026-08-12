@@ -1,4 +1,9 @@
-/** Returns a safe message from a Tauri IPC or JavaScript error. Example: `getErrorMessage(error, "请求失败")`. */
+/**
+ * Returns a safe message from a Tauri IPC or JavaScript error.
+ *
+ * @example
+ * getErrorMessage(error, "请求失败");
+ */
 const getErrorMessage = (error: unknown, fallback: string) => {
 	if (error instanceof Error && error.message) {
 		return error.message;

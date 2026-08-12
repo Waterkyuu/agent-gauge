@@ -5,7 +5,12 @@ import type { AgentRunResult, AgentRuntimeStatus } from "../types/agent";
 const checkWorkBuddyLogin = () =>
 	invoke<AgentRuntimeStatus>("check_workbuddy_login");
 
-/** Sends one natural-language task to the local WorkBuddy runtime. Example: `runWorkBuddyTask("解释这个仓库")`. */
+/**
+ * Sends one natural-language task to the local WorkBuddy runtime.
+ *
+ * @example
+ * runWorkBuddyTask("解释这个仓库");
+ */
 const runWorkBuddyTask = (query: string) =>
 	invoke<AgentRunResult>("run_workbuddy_task", { request: { query } });
 

@@ -18,7 +18,12 @@ type LoginState =
 
 type LoginStates = Record<AgentKind, LoginState>;
 
-/** Formats a measured latency without hiding sub-second precision. Example: `formatDuration(2450)` returns `2.45 s`. */
+/**
+ * Formats a measured latency without hiding sub-second precision.
+ *
+ * @example
+ * formatDuration(2450); // "2.45 s"
+ */
 const formatDuration = (milliseconds: number) => {
 	if (milliseconds < 1000) {
 		return `${milliseconds} ms`;
@@ -26,7 +31,12 @@ const formatDuration = (milliseconds: number) => {
 	return `${(milliseconds / 1000).toFixed(2)} s`;
 };
 
-/** Localizes a known agent reasoning level while retaining its wire value. Example: `formatReasoningEffort("high")` returns `高 (high)`. */
+/**
+ * Localizes a known agent reasoning level while retaining its wire value.
+ *
+ * @example
+ * formatReasoningEffort("high", t); // "高 (high)"
+ */
 const formatReasoningEffort = (effort: string | null, t: TFunction) => {
 	if (!effort) {
 		return t("metricUnavailable");
@@ -38,7 +48,12 @@ const formatReasoningEffort = (effort: string | null, t: TFunction) => {
 	return localized ? `${localized} (${effort})` : effort;
 };
 
-/** Renders the local agent selector, query composer, and completed task metrics. Example: `<App />`. */
+/**
+ * Renders the local agent selector, query composer, and completed task metrics.
+ *
+ * @example
+ * <App />
+ */
 const App = () => {
 	const { t, i18n } = useTranslation();
 	const [selectedAgent, setSelectedAgent] = useState<AgentKind>("codex");
@@ -87,12 +102,22 @@ const App = () => {
 	const isReady = runtimeStatus?.installed === true && runtimeStatus.loggedIn;
 	const numberLocale = i18n.resolvedLanguage ?? "en-US";
 
-	/** Changes and persists the active UI language through i18next. Example: `changeLanguage("zh-CN")`. */
+	/**
+	 * Changes and persists the active UI language through i18next.
+	 *
+	 * @example
+	 * changeLanguage("zh-CN");
+	 */
 	const changeLanguage = async (language: "en-US" | "zh-CN") => {
 		await i18n.changeLanguage(language);
 	};
 
-	/** Switches the active local agent and clears metrics from the prior product. Example: `selectAgent("workbuddy")`. */
+	/**
+	 * Switches the active local agent and clears metrics from the prior product.
+	 *
+	 * @example
+	 * selectAgent("workbuddy");
+	 */
 	const selectAgent = (agent: AgentKind) => {
 		if (isRunning) {
 			return;
@@ -102,7 +127,12 @@ const App = () => {
 		setErrorMessage(null);
 	};
 
-	/** Submits the current query once and replaces the prior result. Example: `onSubmit(event)`. */
+	/**
+	 * Submits the current query once and replaces the prior result.
+	 *
+	 * @example
+	 * onSubmit(event);
+	 */
 	const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		if (!isReady || isRunning || query.trim().length === 0) {
