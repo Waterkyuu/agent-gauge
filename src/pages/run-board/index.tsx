@@ -140,4 +140,4 @@ const RunBoardPage = () => {
 	);
 };
 
-export { RunBoardPage };
+export default RunBoardPage;

@@ -10,20 +10,8 @@ import {
 } from "react-router";
 import { AppShell } from "@/components/app-shell";
 
-/** Loads the comparison route only when it is first rendered. */
-const loadComparisonPage = async () => {
-	const module = await import("@/pages/comparison");
-	return { default: module.ComparisonPage };
-};
-
-/** Loads the run board route only when it is first rendered. */
-const loadRunBoardPage = async () => {
-	const module = await import("@/pages/run-board");
-	return { default: module.RunBoardPage };
-};
-
-const ComparisonPage = lazy(loadComparisonPage);
-const RunBoardPage = lazy(loadRunBoardPage);
+const ComparisonPage = lazy(() => import("@/pages/comparison"));
+const RunBoardPage = lazy(() => import("@/pages/run-board"));
 
 /** Displays a lightweight page skeleton while a route chunk is loading. */
 const RouteLoadingFallback = () => {

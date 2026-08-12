@@ -478,4 +478,4 @@ const ComparisonPage = () => {
 	);
 };
 
-export { ComparisonPage };
+export default ComparisonPage;
