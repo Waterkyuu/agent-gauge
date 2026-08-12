@@ -1,3 +1,5 @@
+import { CircleCheck, Clock, TriangleExclamation } from "@gravity-ui/icons";
+import { Skeleton } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import type { AgentKind, AgentRunResult } from "../types/agent";
 
@@ -28,7 +30,7 @@ const formatDuration = (milliseconds: number) => {
 };
 
 /**
- * Renders the metrics and response for one product in a comparison run.
+ * Renders one product result as a column in the shared comparison surface.
  *
  * @example
  * <AgentComparisonCard agent="codex" result={result} errorMessage={null} isRunning={false} numberLocale="en-US" />
@@ -44,28 +46,48 @@ const AgentComparisonCard = ({
 	const titleId = `comparison-${agent}-title`;
 
 	return (
-		<Card
+		<article
 			aria-labelledby={titleId}
-			className="overflow-hidden border border-zinc-200 bg-white shadow-[0_12px_38px_rgba(0,0,0,0.045)]"
-			role="article"
+			className="min-w-0 border-b border-[var(--app-line)] p-5 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0"
 		>
-			<Card.Header className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
-				<h3 className="text-sm font-bold" id={titleId}>
+			<header className="flex min-h-7 items-center justify-between gap-3">
+				<h3 className="text-sm font-semibold" id={titleId}>
 					{t("comparisonResult", { agent: t(`agentNames.${agent}`) })}
 				</h3>
 				{isRunning ? (
-					<Chip size="sm" variant="soft">
-						<Spinner size="sm" />
+					<span className="flex items-center gap-1.5 text-xs text-[var(--app-muted)]">
+						<Clock aria-hidden="true" className="size-3.5" />
 						{t("agentRunRunning")}
-					</Chip>
+					</span>
 				) : result ? (
-					<CircleCheck aria-hidden="true" className="size-5 text-zinc-500" />
+					<CircleCheck
+						aria-hidden="true"
+						className="size-[18px] text-[var(--app-muted)]"
+					/>
 				) : null}
-			</Card.Header>
+			</header>
+
+			{isRunning ? (
+				<div className="mt-5" aria-label={t("agentRunRunning")} role="status">
+					<div className="grid grid-cols-3 gap-4 border-y border-[var(--app-line)] py-4">
+						{[0, 1, 2].map((item) => (
+							<div key={item}>
+								<Skeleton className="h-2 w-14 rounded" />
+								<Skeleton className="mt-3 h-4 w-12 rounded" />
+							</div>
+						))}
+					</div>
+					<div className="mt-5 space-y-2">
+						<Skeleton className="h-3 w-full rounded" />
+						<Skeleton className="h-3 w-5/6 rounded" />
+						<Skeleton className="h-3 w-2/3 rounded" />
+					</div>
+				</div>
+			) : null}
 
 			{errorMessage ? (
-				<Card.Content
-					className="flex gap-3 p-5 text-sm text-zinc-600"
+				<div
+					className="mt-5 flex gap-3 rounded-lg border border-[var(--app-line)] bg-[var(--app-hover)] p-4 text-sm text-[var(--app-muted)]"
 					role="alert"
 				>
 					<TriangleExclamation
@@ -73,12 +95,12 @@ const AgentComparisonCard = ({
 						className="mt-0.5 size-4 shrink-0"
 					/>
 					<p>{errorMessage}</p>
-				</Card.Content>
+				</div>
 			) : null}
 
 			{result ? (
-				<Card.Content className="p-5">
-					<div className="grid grid-cols-3 divide-x divide-zinc-200 rounded-xl border border-zinc-200 bg-zinc-50">
+				<div className="mt-5">
+					<div className="grid grid-cols-3 gap-4 border-y border-[var(--app-line)] py-4">
 						{[
 							[
 								t("firstToken"),
@@ -93,42 +115,46 @@ const AgentComparisonCard = ({
 									t("metricUnavailable"),
 							],
 						].map(([label, value]) => (
-							<div className="min-w-0 p-3" key={label}>
-								<p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+							<div className="min-w-0" key={label}>
+								<p className="truncate text-[11px] text-[var(--app-faint)]">
 									{label}
 								</p>
-								<p className="mt-2 text-sm font-bold tabular-nums">{value}</p>
+								<p className="mt-1.5 font-mono text-sm font-semibold tabular-nums">
+									{value}
+								</p>
 							</div>
 						))}
 					</div>
 					{result.tokenUsage ? (
-						<p className="mt-3 text-[11px] leading-5 text-zinc-400">
-							{t("inputTokens")}{" "}
-							{result.tokenUsage.inputTokens.toLocaleString(numberLocale)} ·{" "}
-							{t("outputTokens")}{" "}
-							{result.tokenUsage.outputTokens.toLocaleString(numberLocale)} ·{" "}
-							{t("reasoningTokens")}{" "}
-							{result.tokenUsage.reasoningOutputTokens?.toLocaleString(
-								numberLocale,
-							) ?? t("metricUnavailable")}
-						</p>
+						<div className="mt-4 grid grid-cols-3 gap-3 text-[11px]">
+							{[
+								[t("inputTokens"), result.tokenUsage.inputTokens],
+								[t("outputTokens"), result.tokenUsage.outputTokens],
+								[t("reasoningTokens"), result.tokenUsage.reasoningOutputTokens],
+							].map(([label, value]) => (
+								<div key={label}>
+									<p className="text-[var(--app-faint)]">{label}</p>
+									<p className="mt-1 font-mono font-medium text-[var(--app-muted)] tabular-nums">
+										{typeof value === "number"
+											? value.toLocaleString(numberLocale)
+											: t("metricUnavailable")}
+									</p>
+								</div>
+							))}
+						</div>
 					) : null}
-					<div className="mt-5 border-t border-zinc-100 pt-4">
-						<p className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400">
-							<Clock aria-hidden="true" className="size-3.5" />
+					<div className="mt-5">
+						<p className="mb-2 text-xs font-medium text-[var(--app-muted)]">
 							{t("responseTitle")}
 						</p>
-						<pre className="m-0 max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-zinc-950 p-4 font-sans text-sm leading-6 text-zinc-200">
+						<pre className="m-0 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--app-line)] bg-[var(--app-canvas)] p-4 font-mono text-xs leading-6 text-[var(--app-ink)]">
 							{result.response}
 						</pre>
 					</div>
-				</Card.Content>
+				</div>
 			) : null}
-		</Card>
+		</article>
 	);
 };
 
 export { AgentComparisonCard };
-
-import { CircleCheck, Clock, TriangleExclamation } from "@gravity-ui/icons";
-import { Card, Chip, Spinner } from "@heroui/react";

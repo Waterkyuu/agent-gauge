@@ -1,5 +1,5 @@
-import { MagicWand, Play, Sparkles } from "@gravity-ui/icons";
-import { Button, Card, Chip, TextArea } from "@heroui/react";
+import { MagicWand, Play } from "@gravity-ui/icons";
+import { Button, Card, TextArea } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -130,7 +130,7 @@ const resolveAgentStatus = (
 	if (processState.value[agent]) {
 		return {
 			message: t("agentRunning", { agent: agentName }),
-			tone: "bg-black",
+			tone: "bg-zinc-800",
 			isReady: true,
 		};
 	}
@@ -349,50 +349,28 @@ const ComparisonPage = () => {
 	};
 
 	return (
-		<main className="relative overflow-hidden">
-			<div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[520px] bg-[radial-gradient(circle_at_72%_12%,rgba(0,0,0,0.055),transparent_34%),linear-gradient(to_bottom,#fafafa,white)]" />
-			<section className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-10 lg:py-16">
-				<header className="mb-12 grid items-end gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
-					<div>
-						<Chip className="mb-5" size="sm" variant="soft">
-							<Sparkles aria-hidden="true" className="size-3.5" />
-							{t("tagline")}
-						</Chip>
-						<h1 className="max-w-4xl text-5xl font-bold leading-[0.98] tracking-[-0.055em] sm:text-6xl lg:text-7xl">
-							{t("title")}
-						</h1>
-						<p className="mt-6 max-w-2xl text-base leading-7 text-zinc-500 sm:text-lg">
-							{t("description")}
-						</p>
-					</div>
-					<Card className="border border-zinc-200 bg-black text-white shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
-						<Card.Content className="p-6">
-							<div className="flex items-center justify-between">
-								<span className="grid size-10 place-items-center rounded-xl bg-white text-black">
-									<MagicWand aria-hidden="true" className="size-5" />
-								</span>
-								<span className="font-mono text-xs text-zinc-500">01 / 03</span>
-							</div>
-							<p className="mt-8 text-sm font-semibold">
-								{t("agentSelection")}
-							</p>
-							<p className="mt-2 text-xs leading-5 text-zinc-400">
-								{t("selectedAgents", { count: runnableAgents.length })}
-							</p>
-						</Card.Content>
-					</Card>
-				</header>
+		<main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+			<header className="mb-8 border-b border-[var(--app-line)] pb-7">
+				<p className="mb-2 text-sm font-medium text-[var(--app-muted)]">
+					{t("tagline")}
+				</p>
+				<h1 className="max-w-3xl text-3xl font-semibold leading-[1.08] tracking-[-0.04em] sm:text-4xl">
+					{t("title")}
+				</h1>
+				<p className="mt-3 max-w-[65ch] text-sm leading-6 text-[var(--app-muted)] sm:text-base">
+					{t("description")}
+				</p>
+			</header>
 
-				<fieldset aria-label={t("agentSelection")} className="mb-8">
-					<div className="mb-4 flex items-center justify-between gap-4">
-						<legend className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
-							{t("agentSelection")}
-						</legend>
-						<span className="text-xs font-medium text-zinc-400">
-							{t("selectedAgents", { count: runnableAgents.length })}
+			<div className="grid items-start gap-5 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.35fr)]">
+				<section className="overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)]">
+					<header className="flex items-center justify-between gap-4 border-b border-[var(--app-line)] px-4 py-3.5">
+						<h2 className="text-sm font-semibold">{t("agentSelection")}</h2>
+						<span className="font-mono text-xs text-[var(--app-muted)] tabular-nums">
+							{runnableAgents.length} / {AGENT_KINDS.length}
 						</span>
-					</div>
-					<div className="grid gap-4 md:grid-cols-3">
+					</header>
+					<fieldset aria-label={t("agentSelection")}>
 						{AGENT_KINDS.map((agent) => {
 							const loginState = loginStates[agent];
 							const runtimeStatus =
@@ -413,26 +391,26 @@ const ComparisonPage = () => {
 								/>
 							);
 						})}
-					</div>
-				</fieldset>
+					</fieldset>
+				</section>
 
-				<Card className="overflow-hidden border border-zinc-200 bg-white shadow-[0_16px_50px_rgba(0,0,0,0.055)]">
+				<Card className="overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-raised)] shadow-none">
 					<form onSubmit={onSubmit}>
-						<Card.Header className="flex items-center gap-3 border-b border-zinc-100 px-5 py-4 sm:px-6">
-							<span className="grid size-9 place-items-center rounded-xl bg-zinc-100 text-black">
-								<MagicWand aria-hidden="true" className="size-[18px]" />
+						<Card.Header className="!flex-row !justify-start gap-3 border-b border-[var(--app-line)] px-4 py-3.5 sm:px-5">
+							<span className="grid size-8 place-items-center rounded-lg bg-[var(--app-hover)] text-[var(--app-muted)]">
+								<MagicWand aria-hidden="true" className="size-4" />
 							</span>
-							<div>
-								<p className="text-sm font-bold">{t("queryLabel")}</p>
-								<p className="mt-0.5 text-xs text-zinc-400">02 / 03</p>
-							</div>
+							<p className="text-sm font-semibold">{t("queryLabel")}</p>
 						</Card.Header>
-						<Card.Content className="p-4 sm:p-6">
-							<label className="sr-only" htmlFor="agent-query">
+						<Card.Content className="p-4 sm:p-5">
+							<label
+								className="mb-2 block text-xs font-medium text-[var(--app-muted)]"
+								htmlFor="agent-query"
+							>
 								{t("queryLabel")}
 							</label>
 							<TextArea
-								className="min-h-36 w-full resize-y rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-900 outline-none transition focus:border-black focus:bg-white focus:ring-4 focus:ring-zinc-100"
+								className="min-h-56 w-full resize-y rounded-lg border border-[var(--app-line)] bg-[var(--app-canvas)] p-4 text-sm leading-6 text-[var(--app-ink)] outline-none transition-colors placeholder:text-[var(--app-faint)] focus:border-zinc-700 focus:bg-[var(--app-raised)] focus:ring-2 focus:ring-zinc-200"
 								disabled={isRunning}
 								id="agent-query"
 								maxLength={16000}
@@ -441,13 +419,16 @@ const ComparisonPage = () => {
 								value={query}
 								variant="secondary"
 							/>
+							<p className="mt-2 text-right font-mono text-[11px] text-[var(--app-faint)] tabular-nums">
+								{query.length.toLocaleString(numberLocale)} / 16,000
+							</p>
 						</Card.Content>
-						<Card.Footer className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-4 sm:px-6">
-							<p className="text-xs font-medium text-zinc-400">
+						<Card.Footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5 sm:px-5">
+							<p className="text-xs text-[var(--app-muted)]">
 								{t("selectedAgents", { count: runnableAgents.length })}
 							</p>
 							<Button
-								className="rounded-xl bg-black px-5 text-white shadow-lg shadow-black/10"
+								className="rounded-lg bg-zinc-900 px-5 text-zinc-50 transition-transform active:scale-[0.98]"
 								isDisabled={
 									isRunning ||
 									query.trim().length === 0 ||
@@ -464,40 +445,35 @@ const ComparisonPage = () => {
 						</Card.Footer>
 					</form>
 				</Card>
+			</div>
 
-				{comparisonAgents.length > 0 ? (
-					<section className="mt-12" aria-labelledby="comparison-title">
-						<h2
-							className="mb-5 text-xs font-bold uppercase tracking-[0.16em] text-zinc-500"
-							id="comparison-title"
-						>
-							{t("comparisonTitle")}
-						</h2>
-						<div className="grid items-start gap-4 xl:grid-cols-3">
-							{comparisonAgents.map((agent) => {
-								const runState = runStates[agent];
+			{comparisonAgents.length > 0 ? (
+				<section className="mt-8" aria-labelledby="comparison-title">
+					<h2 className="mb-3 text-sm font-semibold" id="comparison-title">
+						{t("comparisonTitle")}
+					</h2>
+					<div className="grid overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] lg:grid-cols-3">
+						{comparisonAgents.map((agent) => {
+							const runState = runStates[agent];
 
-								return (
-									<AgentComparisonCard
-										agent={agent}
-										errorMessage={
-											runState.status === "failed"
-												? runState.errorMessage
-												: null
-										}
-										isRunning={runState.status === "running"}
-										key={agent}
-										numberLocale={numberLocale}
-										result={
-											runState.status === "succeeded" ? runState.result : null
-										}
-									/>
-								);
-							})}
-						</div>
-					</section>
-				) : null}
-			</section>
+							return (
+								<AgentComparisonCard
+									agent={agent}
+									errorMessage={
+										runState.status === "failed" ? runState.errorMessage : null
+									}
+									isRunning={runState.status === "running"}
+									key={agent}
+									numberLocale={numberLocale}
+									result={
+										runState.status === "succeeded" ? runState.result : null
+									}
+								/>
+							);
+						})}
+					</div>
+				</section>
+			) : null}
 		</main>
 	);
 };

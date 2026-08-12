@@ -1,3 +1,5 @@
+import { Check, Terminal } from "@gravity-ui/icons";
+import { cn } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type { AgentKind, AgentRuntimeStatus } from "../types/agent";
@@ -37,10 +39,10 @@ const formatReasoningEffort = (effort: string | null, t: TFunction) => {
 };
 
 /**
- * Renders one selectable Agent with its live state and runtime configuration.
+ * Renders one Agent as a compact row in the target selection matrix.
  *
  * @example
- * <AgentSelectionCard agent="codex" statusMessage="Codex: running" statusTone="bg-emerald-400" runtimeStatus={status} isSelected isDisabled={false} onToggle={setAgent} />
+ * <AgentSelectionCard agent="codex" statusMessage="Codex: running" statusTone="bg-zinc-800" runtimeStatus={status} isSelected isDisabled={false} onToggle={setAgent} />
  */
 const AgentSelectionCard = ({
 	agent,
@@ -57,68 +59,58 @@ const AgentSelectionCard = ({
 		<button
 			aria-label={t(`agentNames.${agent}`)}
 			aria-pressed={isSelected}
-			className="group block w-full rounded-2xl text-left outline-none ring-black transition focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
+			className="group grid w-full gap-3 border-b border-[var(--app-line)] px-4 py-4 text-left outline-none transition-colors last:border-b-0 hover:bg-[var(--app-hover)] focus-visible:bg-[var(--app-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zinc-800 disabled:cursor-not-allowed disabled:opacity-45 sm:grid-cols-[minmax(0,1.2fr)_minmax(150px,1fr)_24px] sm:items-center"
 			disabled={isDisabled}
 			onClick={() => onToggle(agent)}
 			type="button"
 		>
-			<Card
-				className={cn(
-					"h-full overflow-hidden border border-zinc-200 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.035)] transition group-hover:-translate-y-0.5 group-hover:border-zinc-400 group-hover:shadow-[0_14px_38px_rgba(0,0,0,0.07)]",
-					isSelected && "border-black ring-1 ring-black",
-				)}
-			>
-				<Card.Content className="p-5">
-					<div className="flex items-start justify-between gap-3">
-						<span className="grid size-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50">
-							<Terminal aria-hidden="true" className="size-5" />
-						</span>
-						<span
-							className={cn(
-								"grid size-6 place-items-center rounded-full border border-zinc-200 text-transparent transition",
-								isSelected && "border-black bg-black text-white",
-							)}
-						>
-							<Check aria-hidden="true" className="size-3.5" />
-						</span>
-					</div>
-					<div className="mt-5 flex items-center gap-2">
-						<span className="text-base font-bold tracking-[-0.02em]">
-							{t(`agentNames.${agent}`)}
-						</span>
+			<span className="flex min-w-0 items-center gap-3">
+				<span className="grid size-9 shrink-0 place-items-center rounded-lg border border-[var(--app-line)] bg-[var(--app-raised)] text-[var(--app-muted)]">
+					<Terminal aria-hidden="true" className="size-4" />
+				</span>
+				<span className="min-w-0">
+					<span className="flex items-center gap-2 text-sm font-semibold">
+						{t(`agentNames.${agent}`)}
 						<span
 							aria-hidden="true"
-							className={cn("size-2 rounded-full", statusTone)}
+							className={cn("size-1.5 rounded-full", statusTone)}
 						/>
-					</div>
-					<p className="mt-1.5 min-h-8 text-xs leading-4 text-zinc-500">
+					</span>
+					<span className="mt-0.5 block truncate text-xs text-[var(--app-muted)]">
 						{statusMessage}
-					</p>
-				</Card.Content>
-				<Card.Footer className="grid grid-cols-2 gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-4">
-					<div className="min-w-0">
-						<p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-							{t("currentModel")}
-						</p>
-						<p className="mt-1.5 truncate text-xs font-semibold text-zinc-700">
-							{runtimeStatus?.model ?? t("metricUnavailable")}
-						</p>
-					</div>
-					<div className="min-w-0 border-l border-zinc-200 pl-3">
-						<p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-							{t("reasoningEffort")}
-						</p>
-						<p className="mt-1.5 truncate text-xs font-semibold text-zinc-700">
-							{formatReasoningEffort(runtimeStatus?.reasoningEffort ?? null, t)}
-						</p>
-					</div>
-				</Card.Footer>
-			</Card>
+					</span>
+				</span>
+			</span>
+
+			<span className="grid grid-cols-2 gap-3">
+				<span className="block min-w-0">
+					<span className="block text-[11px] text-[var(--app-faint)]">
+						{t("currentModel")}
+					</span>
+					<span className="mt-0.5 block truncate font-mono text-[11px] font-medium text-[var(--app-ink)]">
+						{runtimeStatus?.model ?? t("metricUnavailable")}
+					</span>
+				</span>
+				<span className="block min-w-0">
+					<span className="block text-[11px] text-[var(--app-faint)]">
+						{t("reasoningEffort")}
+					</span>
+					<span className="mt-0.5 block truncate font-mono text-[11px] font-medium text-[var(--app-ink)]">
+						{formatReasoningEffort(runtimeStatus?.reasoningEffort ?? null, t)}
+					</span>
+				</span>
+			</span>
+
+			<span
+				className={cn(
+					"hidden size-5 place-items-center rounded-md border border-[var(--app-line)] text-transparent transition sm:grid",
+					isSelected && "border-zinc-800 bg-zinc-800 text-zinc-50",
+				)}
+			>
+				<Check aria-hidden="true" className="size-3" />
+			</span>
 		</button>
 	);
 };
 
 export { AgentSelectionCard };
-
-import { Check, Terminal } from "@gravity-ui/icons";
-import { Card, cn } from "@heroui/react";
