@@ -6,12 +6,12 @@ export default defineConfig({
 	test: {
 		css: true,
 		environment: "jsdom",
-		setupFiles: ["./src/test-setup.ts"],
+		setupFiles: ["./test-setup.ts"],
 		coverage: {
 			provider: "v8",
 			reporter: ["text", "html"],
 			include: ["src/**/*.{ts,tsx}"],
-			exclude: ["src/main.tsx", "src/test-setup.ts", "src/vite-env.d.ts"],
+			exclude: ["src/main.tsx", "src/vite-env.d.ts"],
 		},
 	},
 });
