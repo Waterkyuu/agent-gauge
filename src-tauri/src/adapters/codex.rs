@@ -184,7 +184,7 @@ fn run_app_server_task(
     write_message(stdin, r#"{"method":"initialized","params":{}}"#)?;
     write_message(
         stdin,
-        r#"{"method":"thread/start","id":1,"params":{"approvalPolicy":"never","sandbox":"workspaceWrite","ephemeral":true,"serviceName":"agent_gauge"}}"#,
+        r#"{"method":"thread/start","id":1,"params":{"approvalPolicy":"never","sandbox":"workspace-write","ephemeral":true,"serviceName":"agent_gauge"}}"#,
     )?;
     let thread_response = wait_for_response(event_receiver, 1, APP_SERVER_START_TIMEOUT)?;
     let thread_id = thread_response
