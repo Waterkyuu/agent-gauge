@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AgentRunResult, AgentRuntimeStatus } from "../types/agent";
+import type { AgentRunResult, AgentRuntimeStatus } from "@/types/agent";
 
 /** Checks the local Codex credential state through the Tauri backend. */
 const checkCodexLogin = () => invoke<AgentRuntimeStatus>("check_codex_login");
