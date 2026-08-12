@@ -5,7 +5,8 @@ import {
 	Globe,
 	LayoutColumns3,
 } from "@gravity-ui/icons";
-import { Button, cn } from "@heroui/react";
+import { Button } from "@heroui/react";
+import { cn } from "cnfast";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 

@@ -5,7 +5,8 @@ import {
 	Terminal,
 	TriangleExclamation,
 } from "@gravity-ui/icons";
-import { Card, cn } from "@heroui/react";
+import { Card } from "@heroui/react";
+import { cn } from "cnfast";
 import type { ComponentType, SVGProps } from "react";
 import { useTranslation } from "react-i18next";
 import { RUN_BOARD_ITEMS, type RunBoardStatus } from "../constants/run-board";
