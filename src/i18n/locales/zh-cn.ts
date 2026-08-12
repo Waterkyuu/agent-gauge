@@ -1,6 +1,12 @@
 const zhCN = {
 	translation: {
 		appName: "AgentGauge",
+		appEdition: "本地 Agent 实验室",
+		mainNavigation: "主导航",
+		navigation: {
+			compare: "性能对比",
+			runs: "运行看板",
+		},
 		agentNames: {
 			claude: "Claude Code",
 			codex: "Codex",
@@ -56,6 +62,63 @@ const zhCN = {
 		responseTitle: "响应",
 		metricUnavailable: "不可用",
 		requestFailed: "任务执行失败，请重试。",
+		weekdays: {
+			mon: "周一",
+			tue: "周二",
+			wed: "周三",
+			thu: "周四",
+			fri: "周五",
+			sat: "周六",
+			sun: "周日",
+		},
+		runBoard: {
+			eyebrow: "运行日历",
+			title: "Agent 运行看板",
+			description:
+				"按日期和状态追踪本地 Agent 任务，快速掌握正在执行、已完成和异常中断的工作。",
+			liveSync: "实时同步",
+			weekLabel: "本周",
+			month: "2026 年 8 月",
+			previousWeek: "上一周",
+			nextWeek: "下一周",
+			today: "今天",
+			status: {
+				running: "Running",
+				finish: "Finish",
+				error: "Error",
+			},
+			statusDescription: {
+				running: "正在执行",
+				finish: "已顺利完成",
+				error: "需要处理",
+			},
+			items: {
+				repositoryAudit: {
+					title: "仓库架构审计",
+					description: "梳理模块边界并标记高耦合代码路径。",
+				},
+				releaseNotes: {
+					title: "生成发布说明",
+					description: "汇总本周提交并生成面向用户的更新摘要。",
+				},
+				apiComparison: {
+					title: "API 性能对比",
+					description: "比较三个 Agent 的响应延迟与 token 消耗。",
+				},
+				testCoverage: {
+					title: "测试覆盖分析",
+					description: "定位缺少回归测试的关键业务分支。",
+				},
+				migrationPlan: {
+					title: "数据库迁移方案",
+					description: "连接在生成迁移步骤时意外中断。",
+				},
+				dependencyScan: {
+					title: "依赖安全扫描",
+					description: "依赖清单解析失败，需要更新锁文件。",
+				},
+			},
+		},
 	},
 } as const;
 

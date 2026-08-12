@@ -1,6 +1,12 @@
 const enUS = {
 	translation: {
 		appName: "AgentGauge",
+		appEdition: "Local agent lab",
+		mainNavigation: "Main navigation",
+		navigation: {
+			compare: "Compare",
+			runs: "Run board",
+		},
 		agentNames: {
 			claude: "Claude Code",
 			codex: "Codex",
@@ -57,6 +63,69 @@ const enUS = {
 		responseTitle: "Response",
 		metricUnavailable: "Unavailable",
 		requestFailed: "The task failed. Please try again.",
+		weekdays: {
+			mon: "Mon",
+			tue: "Tue",
+			wed: "Wed",
+			thu: "Thu",
+			fri: "Fri",
+			sat: "Sat",
+			sun: "Sun",
+		},
+		runBoard: {
+			eyebrow: "Run calendar",
+			title: "Agent run board",
+			description:
+				"Track local agent tasks by date and status, from work in progress to completed and interrupted runs.",
+			liveSync: "Live sync",
+			weekLabel: "This week",
+			month: "August 2026",
+			previousWeek: "Previous week",
+			nextWeek: "Next week",
+			today: "Today",
+			status: {
+				running: "Running",
+				finish: "Finish",
+				error: "Error",
+			},
+			statusDescription: {
+				running: "In progress",
+				finish: "Completed successfully",
+				error: "Needs attention",
+			},
+			items: {
+				repositoryAudit: {
+					title: "Repository architecture audit",
+					description:
+						"Map module boundaries and flag highly coupled code paths.",
+				},
+				releaseNotes: {
+					title: "Generate release notes",
+					description:
+						"Summarize this week's commits into a user-facing update.",
+				},
+				apiComparison: {
+					title: "API performance comparison",
+					description:
+						"Compare response latency and token use across three agents.",
+				},
+				testCoverage: {
+					title: "Test coverage analysis",
+					description:
+						"Find critical business branches without regression coverage.",
+				},
+				migrationPlan: {
+					title: "Database migration plan",
+					description:
+						"The connection stopped while migration steps were generated.",
+				},
+				dependencyScan: {
+					title: "Dependency security scan",
+					description:
+						"The dependency manifest failed to parse; the lockfile needs an update.",
+				},
+			},
+		},
 	},
 } as const;
 
