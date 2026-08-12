@@ -2,6 +2,11 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AppError {
+    ClaudeNotInstalled,
+    ClaudeProbeFailed,
+    ClaudeProtocolFailed,
+    ClaudeTaskFailed,
+    ClaudeTimedOut,
     CodexProbeFailed,
     CodexProtocolFailed,
     CodexTaskFailed,
@@ -28,6 +33,26 @@ pub(crate) struct IpcError {
 impl From<AppError> for IpcError {
     fn from(error: AppError) -> Self {
         match error {
+            AppError::ClaudeNotInstalled => Self {
+                code: "CLAUDE_NOT_INSTALLED",
+                message: "未找到本地 Claude Code。",
+            },
+            AppError::ClaudeProbeFailed => Self {
+                code: "CLAUDE_PROBE_FAILED",
+                message: "无法检查本地 Claude Code 登录状态。",
+            },
+            AppError::ClaudeProtocolFailed => Self {
+                code: "CLAUDE_PROTOCOL_FAILED",
+                message: "无法读取本地 Claude Code 事件流。",
+            },
+            AppError::ClaudeTaskFailed => Self {
+                code: "CLAUDE_TASK_FAILED",
+                message: "Claude Code 未能完成任务。",
+            },
+            AppError::ClaudeTimedOut => Self {
+                code: "CLAUDE_TIMED_OUT",
+                message: "等待 Claude Code 完成任务超时。",
+            },
             AppError::CodexProbeFailed => Self {
                 code: "CODEX_PROBE_FAILED",
                 message: "无法检查本地 Codex 登录状态。",
