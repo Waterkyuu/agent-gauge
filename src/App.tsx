@@ -1,8 +1,9 @@
 import { Button } from "@heroui/react";
+import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { checkCodexLogin, runCodexTask } from "./api/codex";
 import { checkWorkBuddyLogin, runWorkBuddyTask } from "./api/workbuddy";
-import { ZH_CN } from "./i18n/zh-CN";
 import type {
 	AgentKind,
 	AgentRunResult,
@@ -26,20 +27,20 @@ const formatDuration = (milliseconds: number) => {
 };
 
 /** Localizes a known agent reasoning level while retaining its wire value. Example: `formatReasoningEffort("high")` returns `高 (high)`. */
-const formatReasoningEffort = (effort: string | null) => {
+const formatReasoningEffort = (effort: string | null, t: TFunction) => {
 	if (!effort) {
-		return ZH_CN.metricUnavailable;
+		return t("metricUnavailable");
 	}
 
-	const localized =
-		ZH_CN.reasoningEffortLevels[
-			effort as keyof typeof ZH_CN.reasoningEffortLevels
-		];
+	const localized = t(`reasoningEffortLevels.${effort}`, {
+		defaultValue: effort,
+	});
 	return localized ? `${localized} (${effort})` : effort;
 };
 
 /** Renders the local agent selector, query composer, and completed task metrics. Example: `<App />`. */
 const App = () => {
+	const { t, i18n } = useTranslation();
 	const [selectedAgent, setSelectedAgent] = useState<AgentKind>("codex");
 	const [loginStates, setLoginStates] = useState<LoginStates>({
 		codex: { status: "checking" },
@@ -80,10 +81,16 @@ const App = () => {
 	}, []);
 
 	const loginState = loginStates[selectedAgent];
-	const agentName = ZH_CN.agentNames[selectedAgent];
+	const agentName = t(`agentNames.${selectedAgent}`);
 	const runtimeStatus =
 		loginState.status === "resolved" ? loginState.value : null;
 	const isReady = runtimeStatus?.installed === true && runtimeStatus.loggedIn;
+	const numberLocale = i18n.resolvedLanguage ?? "en-US";
+
+	/** Changes and persists the active UI language through i18next. Example: `changeLanguage("zh-CN")`. */
+	const changeLanguage = async (language: "en-US" | "zh-CN") => {
+		await i18n.changeLanguage(language);
+	};
 
 	/** Switches the active local agent and clears metrics from the prior product. Example: `selectAgent("workbuddy")`. */
 	const selectAgent = (agent: AgentKind) => {
@@ -112,31 +119,35 @@ const App = () => {
 					: runWorkBuddyTask(query.trim())),
 			);
 		} catch (error) {
-			setErrorMessage(getErrorMessage(error, ZH_CN.requestFailed));
+			setErrorMessage(getErrorMessage(error, t("requestFailed")));
 		} finally {
 			setIsRunning(false);
 		}
 	};
 
-	let loginMessage: string = ZH_CN.checkingLogin(agentName);
+	let loginMessage: string = t("checkingLogin", { agent: agentName });
 	let loginTone: string = "bg-amber-400";
 	if (loginState.status === "failed") {
-		loginMessage = ZH_CN.loginCheckFailed(agentName);
+		loginMessage = t("loginCheckFailed", { agent: agentName });
 		loginTone = "bg-rose-400";
 	} else if (loginState.status === "resolved") {
 		if (!loginState.value.installed) {
-			loginMessage = ZH_CN.notInstalled(agentName);
+			loginMessage = t("notInstalled", { agent: agentName });
 			loginTone = "bg-rose-400";
 		} else if (!loginState.value.loggedIn) {
-			loginMessage = ZH_CN.notLoggedIn(agentName);
+			loginMessage = t("notLoggedIn", { agent: agentName });
 			loginTone = "bg-rose-400";
 		} else {
-			loginMessage = ZH_CN.loggedIn(
-				agentName,
+			const authenticationMethod =
 				selectedAgent === "workbuddy"
 					? null
-					: loginState.value.authenticationMethod,
-			);
+					: loginState.value.authenticationMethod;
+			loginMessage = authenticationMethod
+				? t("loggedInWithMethod", {
+						agent: agentName,
+						method: authenticationMethod,
+					})
+				: t("loggedIn", { agent: agentName });
 			loginTone = "bg-emerald-400";
 		}
 	}
@@ -146,14 +157,36 @@ const App = () => {
 			<section className="mx-auto max-w-4xl">
 				<header className="mb-8">
 					<div className="mb-5 flex items-center justify-between gap-4">
-						<p className="font-semibold tracking-tight">{ZH_CN.appName}</p>
-						<div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
-							<span className={`size-2 rounded-full ${loginTone}`} />
-							{loginMessage}
+						<p className="font-semibold tracking-tight">{t("appName")}</p>
+						<div className="flex items-center gap-3">
+							<fieldset
+								aria-label={t("languageSelection")}
+								className="inline-flex gap-1 rounded-lg border border-white/10 bg-white/5 p-1"
+							>
+								{(["zh-CN", "en-US"] as const).map((language) => (
+									<button
+										aria-pressed={i18n.resolvedLanguage === language}
+										className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:text-white aria-pressed:bg-white/10 aria-pressed:text-white"
+										key={language}
+										onClick={() => changeLanguage(language)}
+										type="button"
+									>
+										{t(
+											language === "zh-CN"
+												? "languages.zhCN"
+												: "languages.enUS",
+										)}
+									</button>
+								))}
+							</fieldset>
+							<div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+								<span className={`size-2 rounded-full ${loginTone}`} />
+								{loginMessage}
+							</div>
 						</div>
 					</div>
 					<fieldset
-						aria-label={ZH_CN.agentSelection}
+						aria-label={t("agentSelection")}
 						className="mb-6 inline-flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1"
 					>
 						{(["codex", "workbuddy"] as const).map((agent) => (
@@ -165,37 +198,38 @@ const App = () => {
 								onClick={() => selectAgent(agent)}
 								type="button"
 							>
-								{ZH_CN.agentNames[agent]}
+								{t(`agentNames.${agent}`)}
 							</button>
 						))}
 					</fieldset>
 					<p className="mb-2 text-sm font-medium text-indigo-300">
-						{ZH_CN.tagline}
+						{t("tagline")}
 					</p>
 					<h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
-						{ZH_CN.title}
+						{t("title")}
 					</h1>
 					<p className="mt-4 max-w-2xl leading-7 text-slate-400">
-						{ZH_CN.description}
+						{t("description")}
 					</p>
 					{isReady ? (
 						<dl
-							aria-label={ZH_CN.runtimeConfiguration(agentName)}
+							aria-label={t("runtimeConfiguration", { agent: agentName })}
 							className="mt-5 grid gap-3 sm:grid-cols-2"
 						>
 							<div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-								<dt className="text-xs text-slate-500">{ZH_CN.currentModel}</dt>
+								<dt className="text-xs text-slate-500">{t("currentModel")}</dt>
 								<dd className="mt-1 font-medium text-slate-100">
-									{runtimeStatus?.model ?? ZH_CN.metricUnavailable}
+									{runtimeStatus?.model ?? t("metricUnavailable")}
 								</dd>
 							</div>
 							<div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
 								<dt className="text-xs text-slate-500">
-									{ZH_CN.reasoningEffort}
+									{t("reasoningEffort")}
 								</dt>
 								<dd className="mt-1 font-medium text-slate-100">
 									{formatReasoningEffort(
 										runtimeStatus?.reasoningEffort ?? null,
+										t,
 									)}
 								</dd>
 							</div>
@@ -211,7 +245,7 @@ const App = () => {
 						className="mb-2 block text-sm font-medium"
 						htmlFor="agent-query"
 					>
-						{ZH_CN.queryLabel}
+						{t("queryLabel")}
 					</label>
 					<textarea
 						className="min-h-32 w-full resize-y rounded-xl border border-white/10 bg-slate-950/80 p-4 text-sm leading-6 text-slate-100 outline-none transition focus:border-indigo-400"
@@ -219,7 +253,7 @@ const App = () => {
 						id="agent-query"
 						maxLength={16000}
 						onChange={(event) => setQuery(event.target.value)}
-						placeholder={ZH_CN.queryPlaceholder}
+						placeholder={t("queryPlaceholder")}
 						value={query}
 					/>
 					<div className="mt-4 flex items-center justify-end">
@@ -228,7 +262,9 @@ const App = () => {
 							type="submit"
 							variant="primary"
 						>
-							{isRunning ? ZH_CN.running(agentName) : ZH_CN.send(agentName)}
+							{isRunning
+								? t("running", { agent: agentName })
+								: t("send", { agent: agentName })}
 						</Button>
 					</div>
 					{errorMessage ? (
@@ -244,21 +280,21 @@ const App = () => {
 							className="mb-3 text-sm font-medium text-slate-300"
 							id="metrics-title"
 						>
-							{ZH_CN.metricsTitle}
+							{t("metricsTitle")}
 						</h2>
 						<div className="grid gap-3 sm:grid-cols-3">
 							{[
 								[
-									ZH_CN.firstToken,
+									t("firstToken"),
 									result.timeToFirstTokenMs === null
-										? ZH_CN.metricUnavailable
+										? t("metricUnavailable")
 										: formatDuration(result.timeToFirstTokenMs),
 								],
-								[ZH_CN.totalDuration, formatDuration(result.totalDurationMs)],
+								[t("totalDuration"), formatDuration(result.totalDurationMs)],
 								[
-									ZH_CN.totalTokens,
-									result.tokenUsage?.totalTokens.toLocaleString("zh-CN") ??
-										ZH_CN.metricUnavailable,
+									t("totalTokens"),
+									result.tokenUsage?.totalTokens.toLocaleString(numberLocale) ??
+										t("metricUnavailable"),
 								],
 							].map(([label, value]) => (
 								<div
@@ -274,19 +310,19 @@ const App = () => {
 						</div>
 						{result.tokenUsage ? (
 							<p className="mt-3 text-xs text-slate-500">
-								{ZH_CN.inputTokens}{" "}
-								{result.tokenUsage.inputTokens.toLocaleString("zh-CN")} ·{" "}
-								{ZH_CN.outputTokens}{" "}
-								{result.tokenUsage.outputTokens.toLocaleString("zh-CN")} ·{" "}
-								{ZH_CN.reasoningTokens}{" "}
+								{t("inputTokens")}{" "}
+								{result.tokenUsage.inputTokens.toLocaleString(numberLocale)} ·{" "}
+								{t("outputTokens")}{" "}
+								{result.tokenUsage.outputTokens.toLocaleString(numberLocale)} ·{" "}
+								{t("reasoningTokens")}{" "}
 								{result.tokenUsage.reasoningOutputTokens?.toLocaleString(
-									"zh-CN",
-								) ?? ZH_CN.metricUnavailable}
+									numberLocale,
+								) ?? t("metricUnavailable")}
 							</p>
 						) : null}
 						<div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-5">
 							<h2 className="mb-3 text-sm font-medium text-slate-300">
-								{ZH_CN.responseTitle(agentName)}
+								{t("responseTitle", { agent: agentName })}
 							</h2>
 							<pre className="m-0 whitespace-pre-wrap font-sans text-sm leading-7 text-slate-200">
 								{result.response}

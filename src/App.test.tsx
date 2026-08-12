@@ -1,7 +1,9 @@
+import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import "./i18n";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 
@@ -50,6 +52,13 @@ describe("App", () => {
 		await userEvent.click(screen.getByRole("button", { name: "WorkBuddy" }));
 		expect(screen.getByText("fast-model")).toBeInTheDocument();
 		expect(screen.getByText("默认 (enabled)")).toBeInTheDocument();
+
+		await userEvent.click(screen.getByRole("button", { name: "English" }));
+		expect(screen.getByText("Current model")).toBeInTheDocument();
+		expect(
+			screen.getByText("Send one task and get real runtime metrics."),
+		).toBeInTheDocument();
+		expect(localStorage.getItem("language")).toBe("en-US");
 	});
 
 	// Verifies the query submission and completed metric presentation.
