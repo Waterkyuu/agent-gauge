@@ -2,13 +2,13 @@ import {
 	CircleCheck,
 	Clock,
 	Play,
-	Terminal,
 	TriangleExclamation,
 } from "@gravity-ui/icons";
 import { Card } from "@heroui/react";
 import { cn } from "cnfast";
 import type { ComponentType, SVGProps } from "react";
 import { useTranslation } from "react-i18next";
+import { AgentLogo } from "@/components/agent-logo";
 import { RUN_BOARD_ITEMS, type RunBoardStatus } from "@/constants/run-board";
 
 type StatusPresentation = {
@@ -103,8 +103,11 @@ const RunBoardPage = () => {
 												<div className="flex items-center justify-between gap-3 text-[11px] text-[var(--app-faint)]">
 													<span className="font-mono">{item.id}</span>
 													<span className="flex items-center gap-1.5">
-														<Terminal aria-hidden="true" className="size-3.5" />
-														{item.agent}
+														<AgentLogo
+															agent={item.agent}
+															className="size-3.5"
+														/>
+														{t(`agentNames.${item.agent}`)}
 													</span>
 												</div>
 												<h3 className="mt-4 text-sm font-semibold tracking-[-0.015em]">

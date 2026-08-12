@@ -1,6 +1,7 @@
 import { CircleCheck, Clock, TriangleExclamation } from "@gravity-ui/icons";
 import { Skeleton } from "@heroui/react";
 import { useTranslation } from "react-i18next";
+import { AgentLogo } from "@/components/agent-logo";
 import type { AgentKind, AgentRunResult } from "@/types/agent";
 
 type AgentComparisonCardProps = {
@@ -51,9 +52,12 @@ const AgentComparisonCard = ({
 			className="min-w-0 border-b border-[var(--app-line)] p-5 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0"
 		>
 			<header className="flex min-h-7 items-center justify-between gap-3">
-				<h3 className="text-sm font-semibold" id={titleId}>
-					{t("comparisonResult", { agent: t(`agentNames.${agent}`) })}
-				</h3>
+				<div className="flex min-w-0 items-center gap-2.5">
+					<AgentLogo agent={agent} className="size-5" />
+					<h3 className="truncate text-sm font-semibold" id={titleId}>
+						{t("comparisonResult", { agent: t(`agentNames.${agent}`) })}
+					</h3>
+				</div>
 				{isRunning ? (
 					<span className="flex items-center gap-1.5 text-xs text-[var(--app-muted)]">
 						<Clock aria-hidden="true" className="size-3.5" />

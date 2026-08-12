@@ -1,7 +1,8 @@
-import { Check, Terminal } from "@gravity-ui/icons";
+import { Check } from "@gravity-ui/icons";
 import { cn } from "cnfast";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { AgentLogo } from "@/components/agent-logo";
 import type { AgentKind, AgentRuntimeStatus } from "@/types/agent";
 
 type AgentSelectionCardProps = {
@@ -72,8 +73,8 @@ const AgentSelectionCard = ({
 			type="button"
 		>
 			<span className="flex min-w-0 items-center gap-3">
-				<span className="grid size-9 shrink-0 place-items-center rounded-lg border border-[var(--app-line)] bg-[var(--app-raised)] text-[var(--app-muted)]">
-					<Terminal aria-hidden="true" className="size-4" />
+				<span className="grid size-9 shrink-0 place-items-center rounded-lg border border-[var(--app-line)] bg-[var(--app-raised)]">
+					<AgentLogo agent={agent} className="size-5" />
 				</span>
 				<span className="min-w-0">
 					<span className="flex items-center gap-2 text-sm font-semibold">
