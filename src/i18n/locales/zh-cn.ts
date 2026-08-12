@@ -3,6 +3,8 @@ const zhCN = {
 		appName: "AgentGauge",
 		appEdition: "本地 Agent 实验室",
 		mainNavigation: "主导航",
+		collapseSidebar: "收起侧边栏",
+		expandSidebar: "展开侧边栏",
 		navigation: {
 			compare: "性能对比",
 			runs: "运行看板",

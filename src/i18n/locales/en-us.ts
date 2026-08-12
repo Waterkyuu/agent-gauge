@@ -3,6 +3,8 @@ const enUS = {
 		appName: "AgentGauge",
 		appEdition: "Local agent lab",
 		mainNavigation: "Main navigation",
+		collapseSidebar: "Collapse sidebar",
+		expandSidebar: "Expand sidebar",
 		navigation: {
 			compare: "Compare",
 			runs: "Run board",

@@ -85,6 +85,38 @@ describe("App", () => {
 		expect(localStorage.getItem("language")).toBe("en-US");
 	});
 
+	// Verifies that the desktop sidebar remains navigable after it is collapsed.
+	it("collapses and expands the desktop sidebar", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+
+		const collapseButton = screen.getByRole("button", {
+			name: /收起侧边栏|Collapse sidebar/,
+		});
+		expect(collapseButton).toHaveAttribute("aria-expanded", "true");
+
+		await user.click(collapseButton);
+
+		expect(
+			screen.getByRole("button", { name: /展开侧边栏|Expand sidebar/ }),
+		).toHaveAttribute("aria-expanded", "false");
+		expect(
+			screen.queryByText(/本地 Agent 实验室|Local agent lab/),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByText(/切换语言|Switch language/),
+		).not.toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole("button", { name: /展开侧边栏|Expand sidebar/ }),
+		);
+
+		expect(
+			screen.getByText(/本地 Agent 实验室|Local agent lab/),
+		).toBeInTheDocument();
+		expect(screen.getByText(/切换语言|Switch language/)).toBeInTheDocument();
+	});
+
 	// Verifies that the running process state refreshes without reloading the UI.
 	it("refreshes the selected agent process state", async () => {
 		let processProbeCount = 0;
