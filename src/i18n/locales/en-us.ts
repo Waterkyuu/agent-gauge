@@ -1,0 +1,55 @@
+const enUS = {
+	translation: {
+		appName: "AgentGauge",
+		agentNames: {
+			codex: "Codex",
+			workbuddy: "WorkBuddy",
+		},
+		agentSelection: "Select an agent product",
+		languageSelection: "Switch language",
+		languages: {
+			zhCN: "中文",
+			enUS: "English",
+		},
+		tagline: "Local agent performance measurement",
+		title: "Send one task and get real runtime metrics.",
+		description:
+			"Connect directly to a local agent and observe the full task lifecycle from the first token through completion.",
+		queryLabel: "Task query",
+		queryPlaceholder:
+			"For example: Summarize the main features of this repository without modifying files.",
+		send: "Send to {{agent}}",
+		running: "{{agent}} is running…",
+		checkingLogin: "Checking the local {{agent}} login status…",
+		notInstalled: "Local {{agent}} was not found.",
+		notLoggedIn: "Local {{agent}} is not signed in.",
+		loginCheckFailed: "Unable to check the local {{agent}} login status.",
+		loggedIn: "{{agent}}: signed in",
+		loggedInWithMethod: "{{agent}}: signed in with {{method}}",
+		runtimeConfiguration: "Current {{agent}} configuration",
+		currentModel: "Current model",
+		reasoningEffort: "Reasoning effort",
+		reasoningEffortLevels: {
+			enabled: "Default",
+			none: "None",
+			minimal: "Minimal",
+			low: "Low",
+			medium: "Medium",
+			high: "High",
+			xhigh: "X-High",
+			max: "Max",
+		},
+		metricsTitle: "Current run",
+		firstToken: "First token",
+		totalDuration: "Total duration",
+		totalTokens: "Total tokens",
+		inputTokens: "Input",
+		outputTokens: "Output",
+		reasoningTokens: "Reasoning",
+		responseTitle: "{{agent}} response",
+		metricUnavailable: "Unavailable",
+		requestFailed: "The task failed. Please try again.",
+	},
+} as const;
+
+export { enUS };
