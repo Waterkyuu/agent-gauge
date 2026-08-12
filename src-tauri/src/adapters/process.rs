@@ -30,14 +30,25 @@ where
     let mut states = AgentProcessStates::default();
 
     for process_name in process_names {
-        let executable_name = Path::new(process_name.as_ref().trim())
+        let normalized_path = process_name
+            .as_ref()
+            .trim()
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+        let is_workbuddy_desktop =
+            normalized_path.ends_with("/workbuddy ai.app/contents/macos/electron");
+        let executable_name = Path::new(&normalized_path)
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
+            .unwrap_or_default();
         let executable_name = executable_name
             .strip_suffix(".exe")
-            .unwrap_or(&executable_name);
+            .unwrap_or(executable_name);
+
+        if is_workbuddy_desktop {
+            states.workbuddy = true;
+            continue;
+        }
 
         match executable_name {
             "claude" => states.claude = true,
@@ -64,6 +75,14 @@ mod tests {
 
         assert!(states.claude);
         assert!(states.codex);
+        assert!(states.workbuddy);
+    }
+
+    #[test]
+    fn detects_the_workbuddy_desktop_electron_process() {
+        let states =
+            process_states_from_names(["/Applications/WorkBuddy AI.app/Contents/MacOS/Electron"]);
+
         assert!(states.workbuddy);
     }
 
