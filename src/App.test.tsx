@@ -16,6 +16,13 @@ describe("App", () => {
 	beforeEach(() => {
 		invokeMock.mockReset();
 		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				return Promise.resolve({
+					claude: false,
+					codex: true,
+					workbuddy: false,
+				});
+			}
 			if (command === "check_claude_login") {
 				return Promise.resolve({
 					installed: true,
@@ -51,9 +58,7 @@ describe("App", () => {
 	it("shows the local Codex login status", async () => {
 		render(<App />);
 
-		expect(
-			await screen.findByText("Codex：已通过 ChatGPT 登录"),
-		).toBeInTheDocument();
+		expect(await screen.findByText("Codex：运行中")).toBeInTheDocument();
 		expect(screen.getByText("gpt-5.6-sol")).toBeInTheDocument();
 		expect(screen.getByText("高 (high)")).toBeInTheDocument();
 		expect(screen.getByLabelText("任务内容")).toBeEnabled();
@@ -70,9 +75,48 @@ describe("App", () => {
 		expect(localStorage.getItem("language")).toBe("en-US");
 	});
 
+	// Verifies that the running process state refreshes without reloading the UI.
+	it("refreshes the selected agent process state", async () => {
+		let processProbeCount = 0;
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				processProbeCount += 1;
+				return Promise.resolve({
+					claude: false,
+					codex: processProbeCount > 1,
+					workbuddy: false,
+				});
+			}
+			return Promise.resolve({
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "ChatGPT",
+				model: "gpt-5.6-sol",
+				reasoningEffort: "high",
+			});
+		});
+
+		render(<App />);
+
+		expect(
+			await screen.findByText("Codex：已就绪，未运行"),
+		).toBeInTheDocument();
+		expect(
+			await screen.findByText("Codex：运行中", {}, { timeout: 1500 }),
+		).toBeInTheDocument();
+		expect(processProbeCount).toBeGreaterThanOrEqual(2);
+	});
+
 	// Verifies the query submission and completed metric presentation.
 	it("submits a query and displays the completed metrics", async () => {
 		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				return Promise.resolve({
+					claude: false,
+					codex: true,
+					workbuddy: false,
+				});
+			}
 			if (command === "run_codex_task") {
 				return Promise.resolve({
 					response: "任务完成",
@@ -105,7 +149,7 @@ describe("App", () => {
 		const user = userEvent.setup();
 
 		render(<App />);
-		await screen.findByText("Codex：已通过 ChatGPT 登录");
+		await screen.findByText("Codex：运行中");
 		await user.type(screen.getByLabelText("任务内容"), "只回复任务完成");
 		await user.click(screen.getByRole("button", { name: "发送给 Codex" }));
 

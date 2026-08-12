@@ -1,5 +1,14 @@
 type AgentKind = "claude" | "codex" | "workbuddy";
 
+type AgentProcessStates = {
+	/** Whether a Claude Code process is currently running. */
+	claude: boolean;
+	/** Whether a Codex process is currently running. */
+	codex: boolean;
+	/** Whether a WorkBuddy process is currently running. */
+	workbuddy: boolean;
+};
+
 type AgentRuntimeStatus = {
 	/** Whether the local agent product was discovered. */
 	installed: boolean;
@@ -39,4 +48,10 @@ type AgentRunResult = {
 	tokenUsage: TokenUsage | null;
 };
 
-export type { AgentKind, AgentRunResult, AgentRuntimeStatus, TokenUsage };
+export type {
+	AgentKind,
+	AgentProcessStates,
+	AgentRunResult,
+	AgentRuntimeStatus,
+	TokenUsage,
+};

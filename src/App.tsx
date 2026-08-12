@@ -2,11 +2,13 @@ import { Button } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { checkAgentProcesses } from "./api/agent";
 import { checkClaudeLogin, runClaudeTask } from "./api/claude";
 import { checkCodexLogin, runCodexTask } from "./api/codex";
 import { checkWorkBuddyLogin, runWorkBuddyTask } from "./api/workbuddy";
 import type {
 	AgentKind,
+	AgentProcessStates,
 	AgentRunResult,
 	AgentRuntimeStatus,
 } from "./types/agent";
@@ -18,6 +20,11 @@ type LoginState =
 	| { status: "failed" };
 
 type LoginStates = Record<AgentKind, LoginState>;
+
+type ProcessState =
+	| { status: "checking" }
+	| { status: "resolved"; value: AgentProcessStates }
+	| { status: "failed" };
 
 /**
  * Formats a measured latency without hiding sub-second precision.
@@ -64,6 +71,9 @@ const App = () => {
 		workbuddy: { status: "checking" },
 	});
 	const [query, setQuery] = useState("");
+	const [processState, setProcessState] = useState<ProcessState>({
+		status: "checking",
+	});
 	const [isRunning, setIsRunning] = useState(false);
 	const [result, setResult] = useState<AgentRunResult | null>(null);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -110,11 +120,50 @@ const App = () => {
 			);
 	}, []);
 
+	useEffect(() => {
+		let isActive = true;
+		let isChecking = false;
+
+		/** Refreshes the local process snapshot without overlapping requests. */
+		const refreshAgentProcesses = async () => {
+			if (isChecking) {
+				return;
+			}
+			isChecking = true;
+			try {
+				const value = await checkAgentProcesses();
+				if (isActive) {
+					setProcessState({ status: "resolved", value });
+				}
+			} catch {
+				if (isActive) {
+					setProcessState((current) =>
+						current.status === "checking" ? { status: "failed" } : current,
+					);
+				}
+			} finally {
+				isChecking = false;
+			}
+		};
+
+		refreshAgentProcesses();
+		const intervalId = window.setInterval(refreshAgentProcesses, 1000);
+
+		return () => {
+			isActive = false;
+			window.clearInterval(intervalId);
+		};
+	}, []);
+
 	const loginState = loginStates[selectedAgent];
 	const agentName = t(`agentNames.${selectedAgent}`);
 	const runtimeStatus =
 		loginState.status === "resolved" ? loginState.value : null;
 	const isReady = runtimeStatus?.installed === true && runtimeStatus.loggedIn;
+	const isProcessRunning =
+		processState.status === "resolved"
+			? processState.value[selectedAgent]
+			: null;
 	const numberLocale = i18n.resolvedLanguage ?? "en-US";
 
 	/**
@@ -185,17 +234,18 @@ const App = () => {
 			loginMessage = t("notLoggedIn", { agent: agentName });
 			loginTone = "bg-rose-400";
 		} else {
-			const authenticationMethod =
-				selectedAgent === "workbuddy"
-					? null
-					: loginState.value.authenticationMethod;
-			loginMessage = authenticationMethod
-				? t("loggedInWithMethod", {
-						agent: agentName,
-						method: authenticationMethod,
-					})
-				: t("loggedIn", { agent: agentName });
-			loginTone = "bg-emerald-400";
+			if (processState.status === "checking") {
+				loginMessage = t("checkingProcess", { agent: agentName });
+			} else if (processState.status === "failed") {
+				loginMessage = t("processCheckFailed", { agent: agentName });
+				loginTone = "bg-rose-400";
+			} else if (isProcessRunning) {
+				loginMessage = t("agentRunning", { agent: agentName });
+				loginTone = "bg-emerald-400";
+			} else {
+				loginMessage = t("agentReady", { agent: agentName });
+				loginTone = "bg-sky-400";
+			}
 		}
 	}
 
