@@ -286,6 +286,11 @@ fn collect_run_events(
             serde_json::from_str(&line).map_err(|_| AppError::CodexProtocolFailed)?;
 
         match message.method.as_deref() {
+            Some(
+                "tool/requestUserInput"
+                | "item/tool/requestUserInput"
+                | "mcpServer/elicitation/request",
+            ) => return Err(AppError::CodexNeedsInput),
             Some("item/agentMessage/delta") => {
                 if let Some(delta) = message.params.and_then(|params| params.delta) {
                     collector.record_agent_delta(&delta, started_at.elapsed());
@@ -416,4 +421,33 @@ fn codex_executable_candidates() -> Vec<OsString> {
     ));
 
     candidates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_run_events;
+    use crate::error::AppError;
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    #[test]
+    fn reports_when_codex_requests_user_input() {
+        for method in [
+            "tool/requestUserInput",
+            "item/tool/requestUserInput",
+            "mcpServer/elicitation/request",
+        ] {
+            let (sender, receiver) = mpsc::sync_channel(1);
+            sender
+                .send(Ok(format!(
+                    r#"{{"method":"{method}","id":7,"params":{{}}}}"#
+                )))
+                .expect("fixture should be queued");
+            drop(sender);
+
+            let result = collect_run_events(&receiver, Instant::now());
+
+            assert_eq!(result, Err(AppError::CodexNeedsInput));
+        }
+    }
 }

@@ -82,7 +82,15 @@ struct StreamMessage {
 struct StreamEvent {
     #[serde(rename = "type")]
     event_type: String,
+    content_block: Option<StreamContentBlock>,
     delta: Option<StreamDelta>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamContentBlock {
+    #[serde(rename = "type")]
+    block_type: String,
+    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -243,6 +251,18 @@ fn collect_claude_events(
             serde_json::from_str(&line).map_err(|_| AppError::ClaudeProtocolFailed)?;
 
         if message.message_type == "stream_event" {
+            if message
+                .event
+                .as_ref()
+                .filter(|event| event.event_type == "content_block_start")
+                .and_then(|event| event.content_block.as_ref())
+                .is_some_and(|block| {
+                    block.block_type == "tool_use"
+                        && block.name.as_deref() == Some("AskUserQuestion")
+                })
+            {
+                return Err(AppError::ClaudeNeedsInput);
+            }
             if let Some(delta) = message
                 .event
                 .filter(|event| event.event_type == "content_block_delta")
@@ -410,5 +430,18 @@ mod tests {
             output.metrics.token_usage.map(|usage| usage.total_tokens),
             Some(22)
         );
+    }
+
+    #[test]
+    fn reports_when_claude_asks_the_user_a_question() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        sender
+            .send(Ok(r#"{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"tool_use","name":"AskUserQuestion"}}}"#.to_string()))
+            .expect("fixture should be queued");
+        drop(sender);
+
+        let result = collect_claude_events(&receiver, Instant::now());
+
+        assert_eq!(result, Err(crate::error::AppError::ClaudeNeedsInput));
     }
 }
