@@ -1,0 +1,13 @@
+use serde::Serialize;
+
+/// Describes whether the local Codex CLI can run authenticated tasks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexLoginStatus {
+    /// Indicates whether a Codex executable was found locally.
+    pub(crate) installed: bool,
+    /// Indicates whether the discovered Codex CLI has active credentials.
+    pub(crate) logged_in: bool,
+    /// Contains the safe authentication mode reported by Codex when available.
+    pub(crate) authentication_method: Option<String>,
+}
