@@ -5,6 +5,7 @@ const zhCN = {
 		mainNavigation: "主导航",
 		collapseSidebar: "收起侧边栏",
 		expandSidebar: "展开侧边栏",
+		loadingPage: "正在加载页面",
 		navigation: {
 			compare: "性能对比",
 			runs: "运行看板",

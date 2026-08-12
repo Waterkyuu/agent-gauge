@@ -5,6 +5,7 @@ const enUS = {
 		mainNavigation: "Main navigation",
 		collapseSidebar: "Collapse sidebar",
 		expandSidebar: "Expand sidebar",
+		loadingPage: "Loading page",
 		navigation: {
 			compare: "Compare",
 			runs: "Run board",

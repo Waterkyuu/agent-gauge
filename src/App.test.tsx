@@ -14,6 +14,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 // Covers the user-visible local agent task workflow.
 describe("App", () => {
 	beforeEach(() => {
+		window.history.replaceState({}, "", "/");
 		invokeMock.mockReset();
 		invokeMock.mockImplementation((command: string) => {
 			if (command === "check_agent_processes") {
@@ -115,6 +116,29 @@ describe("App", () => {
 			screen.getByText(/本地 Agent 实验室|Local agent lab/),
 		).toBeInTheDocument();
 		expect(screen.getByText(/切换语言|Switch language/)).toBeInTheDocument();
+	});
+
+	// Verifies that routing updates the URL and redirects unsupported locations.
+	it("navigates lazy routes and redirects unknown paths", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+
+		await user.click(
+			within(screen.getByRole("complementary")).getByRole("button", {
+				name: /运行看板|Run board/,
+			}),
+		);
+		expect(window.location.pathname).toBe("/runs");
+		expect(
+			await screen.findByRole("heading", {
+				name: /Agent 运行看板|Agent run board/,
+			}),
+		).toBeInTheDocument();
+
+		window.history.pushState({}, "", "/unsupported");
+		window.dispatchEvent(new PopStateEvent("popstate"));
+
+		await waitFor(() => expect(window.location.pathname).toBe("/"));
 	});
 
 	// Verifies that the running process state refreshes without reloading the UI.
