@@ -6,6 +6,11 @@ pub(crate) enum AppError {
     CodexProtocolFailed,
     CodexTaskFailed,
     CodexTimedOut,
+    WorkBuddyNotInstalled,
+    WorkBuddyProbeFailed,
+    WorkBuddyProtocolFailed,
+    WorkBuddyTaskFailed,
+    WorkBuddyTimedOut,
     InvalidQuery,
     WorkerFailed,
 }
@@ -38,6 +43,26 @@ impl From<AppError> for IpcError {
             AppError::CodexTimedOut => Self {
                 code: "CODEX_TIMED_OUT",
                 message: "等待 Codex 完成任务超时。",
+            },
+            AppError::WorkBuddyNotInstalled => Self {
+                code: "WORKBUDDY_NOT_INSTALLED",
+                message: "未找到本地 WorkBuddy。",
+            },
+            AppError::WorkBuddyProbeFailed => Self {
+                code: "WORKBUDDY_PROBE_FAILED",
+                message: "无法检查本地 WorkBuddy 登录状态。",
+            },
+            AppError::WorkBuddyProtocolFailed => Self {
+                code: "WORKBUDDY_PROTOCOL_FAILED",
+                message: "无法读取本地 WorkBuddy 事件流。",
+            },
+            AppError::WorkBuddyTaskFailed => Self {
+                code: "WORKBUDDY_TASK_FAILED",
+                message: "WorkBuddy 未能完成任务。",
+            },
+            AppError::WorkBuddyTimedOut => Self {
+                code: "WORKBUDDY_TIMED_OUT",
+                message: "等待 WorkBuddy 完成任务超时。",
             },
             AppError::InvalidQuery => Self {
                 code: "INVALID_QUERY",
