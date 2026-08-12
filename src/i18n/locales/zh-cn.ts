@@ -62,26 +62,12 @@ const zhCN = {
 		responseTitle: "响应",
 		metricUnavailable: "不可用",
 		requestFailed: "任务执行失败，请重试。",
-		weekdays: {
-			mon: "周一",
-			tue: "周二",
-			wed: "周三",
-			thu: "周四",
-			fri: "周五",
-			sat: "周六",
-			sun: "周日",
-		},
 		runBoard: {
-			eyebrow: "运行日历",
+			eyebrow: "任务状态",
 			title: "Agent 运行看板",
 			description:
 				"按日期和状态追踪本地 Agent 任务，快速掌握正在执行、已完成和异常中断的工作。",
 			liveSync: "实时同步",
-			weekLabel: "本周",
-			month: "2026 年 8 月",
-			previousWeek: "上一周",
-			nextWeek: "下一周",
-			today: "今天",
 			status: {
 				running: "Running",
 				finish: "Finish",

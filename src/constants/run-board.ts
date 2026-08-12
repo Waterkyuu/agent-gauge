@@ -74,15 +74,5 @@ const RUN_BOARD_ITEMS: RunBoardItem[] = [
 	},
 ];
 
-const RUN_BOARD_DATES = [
-	{ dayKey: "weekdays.mon", date: 10 },
-	{ dayKey: "weekdays.tue", date: 11 },
-	{ dayKey: "weekdays.wed", date: 12 },
-	{ dayKey: "weekdays.thu", date: 13 },
-	{ dayKey: "weekdays.fri", date: 14 },
-	{ dayKey: "weekdays.sat", date: 15 },
-	{ dayKey: "weekdays.sun", date: 16 },
-];
-
 export type { RunBoardItem, RunBoardStatus };
-export { RUN_BOARD_DATES, RUN_BOARD_ITEMS };
+export { RUN_BOARD_ITEMS };

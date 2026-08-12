@@ -63,26 +63,12 @@ const enUS = {
 		responseTitle: "Response",
 		metricUnavailable: "Unavailable",
 		requestFailed: "The task failed. Please try again.",
-		weekdays: {
-			mon: "Mon",
-			tue: "Tue",
-			wed: "Wed",
-			thu: "Thu",
-			fri: "Fri",
-			sat: "Sat",
-			sun: "Sun",
-		},
 		runBoard: {
-			eyebrow: "Run calendar",
+			eyebrow: "Task status",
 			title: "Agent run board",
 			description:
 				"Track local agent tasks by date and status, from work in progress to completed and interrupted runs.",
 			liveSync: "Live sync",
-			weekLabel: "This week",
-			month: "August 2026",
-			previousWeek: "Previous week",
-			nextWeek: "Next week",
-			today: "Today",
 			status: {
 				running: "Running",
 				finish: "Finish",
