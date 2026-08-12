@@ -3,19 +3,19 @@ import { Button, Card, TextArea } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { checkAgentProcesses } from "../api/agent";
-import { checkClaudeLogin, runClaudeTask } from "../api/claude";
-import { checkCodexLogin, runCodexTask } from "../api/codex";
-import { checkWorkBuddyLogin, runWorkBuddyTask } from "../api/workbuddy";
-import { AgentComparisonCard } from "../components/agent-comparison-card";
-import { AgentSelectionCard } from "../components/agent-selection-card";
+import { checkAgentProcesses } from "../../api/agent";
+import { checkClaudeLogin, runClaudeTask } from "../../api/claude";
+import { checkCodexLogin, runCodexTask } from "../../api/codex";
+import { checkWorkBuddyLogin, runWorkBuddyTask } from "../../api/workbuddy";
 import type {
 	AgentKind,
 	AgentProcessStates,
 	AgentRunResult,
 	AgentRuntimeStatus,
-} from "../types/agent";
-import { getErrorMessage } from "../utils/error";
+} from "../../types/agent";
+import { getErrorMessage } from "../../utils/error";
+import { AgentComparisonCard } from "./components/agent-comparison-card";
+import { AgentSelectionCard } from "./components/agent-selection-card";
 
 type LoginState =
 	| { status: "checking" }

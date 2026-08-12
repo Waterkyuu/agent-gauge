@@ -12,13 +12,13 @@ import { AppShell } from "../components/app-shell";
 
 /** Loads the comparison route only when it is first rendered. */
 const loadComparisonPage = async () => {
-	const module = await import("../pages/comparison-page");
+	const module = await import("../pages/comparison");
 	return { default: module.ComparisonPage };
 };
 
 /** Loads the run board route only when it is first rendered. */
 const loadRunBoardPage = async () => {
-	const module = await import("../pages/run-board-page");
+	const module = await import("../pages/run-board");
 	return { default: module.RunBoardPage };
 };
 

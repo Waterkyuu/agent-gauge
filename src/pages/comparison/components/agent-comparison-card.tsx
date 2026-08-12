@@ -1,7 +1,7 @@
 import { CircleCheck, Clock, TriangleExclamation } from "@gravity-ui/icons";
 import { Skeleton } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import type { AgentKind, AgentRunResult } from "../types/agent";
+import type { AgentKind, AgentRunResult } from "../../../types/agent";
 
 type AgentComparisonCardProps = {
 	/** Product represented by this comparison result. */
