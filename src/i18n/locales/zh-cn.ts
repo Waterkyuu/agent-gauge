@@ -2,6 +2,7 @@ const zhCN = {
 	translation: {
 		appName: "AgentGauge",
 		agentNames: {
+			claude: "Claude Code",
 			codex: "Codex",
 			workbuddy: "WorkBuddy",
 		},
