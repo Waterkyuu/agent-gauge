@@ -13,6 +13,7 @@ mod domain {
 }
 mod error;
 mod services {
+    pub(crate) mod agent;
     pub(crate) mod codex;
 }
 

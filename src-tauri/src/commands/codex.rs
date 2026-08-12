@@ -2,9 +2,8 @@ use crate::adapters::codex::SystemCodexAdapter;
 use crate::domain::codex_run::{AgentRunMetrics, AgentRunOutput, TokenUsage};
 use crate::dto::codex::CodexLoginStatus;
 use crate::error::{AppError, IpcError};
-use crate::services::codex::{
-    check_codex_login as resolve_codex_login, run_codex_task as execute_codex_task,
-};
+use crate::services::agent::run_agent_task;
+use crate::services::codex::check_codex_login as resolve_codex_login;
 use serde::{Deserialize, Serialize};
 
 /// User input accepted by the Codex task command.
@@ -96,7 +95,7 @@ pub async fn run_codex_task(
     request: RunCodexTaskRequest,
 ) -> Result<RunCodexTaskResponse, IpcError> {
     tauri::async_runtime::spawn_blocking(move || {
-        execute_codex_task(&SystemCodexAdapter, &request.query)
+        run_agent_task(&SystemCodexAdapter, &request.query)
     })
     .await
     .map_err(|_| IpcError::from(AppError::WorkerFailed))?
