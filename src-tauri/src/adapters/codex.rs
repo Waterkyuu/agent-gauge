@@ -1,7 +1,7 @@
 use crate::domain::codex_run::{CodexRunMetricsCollector, CodexRunOutput, TokenUsage};
 use crate::error::AppError;
 use serde::Deserialize;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
@@ -18,6 +18,8 @@ pub(crate) struct CodexAuthentication {
     pub(crate) installed: bool,
     pub(crate) logged_in: bool,
     pub(crate) authentication_method: Option<String>,
+    pub(crate) model: Option<String>,
+    pub(crate) reasoning_effort: Option<String>,
 }
 
 pub(crate) trait CodexAdapter {
@@ -40,18 +42,27 @@ impl CodexAdapter for SystemCodexAdapter {
 
             match output {
                 Ok(output) => {
-                    let authentication_method = output.status.success().then(|| {
+                    let logged_in = output.status.success();
+                    let authentication_method = logged_in.then(|| {
                         String::from_utf8_lossy(&output.stdout)
                             .trim()
                             .strip_prefix("Logged in using ")
                             .unwrap_or("authenticated credentials")
                             .to_string()
                     });
+                    let runtime_defaults = logged_in
+                        .then(|| resolve_codex_runtime_defaults(&executable))
+                        .transpose()?;
 
                     return Ok(CodexAuthentication {
                         installed: true,
-                        logged_in: output.status.success(),
+                        logged_in,
                         authentication_method,
+                        model: runtime_defaults
+                            .as_ref()
+                            .map(|defaults| defaults.model.clone()),
+                        reasoning_effort: runtime_defaults
+                            .and_then(|defaults| defaults.reasoning_effort),
                     });
                 }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
@@ -63,32 +74,16 @@ impl CodexAdapter for SystemCodexAdapter {
             installed: false,
             logged_in: false,
             authentication_method: None,
+            model: None,
+            reasoning_effort: None,
         })
     }
 
     fn run_task(&self, query: &str) -> Result<CodexRunOutput, AppError> {
         let executable = resolve_codex_executable()?;
-        let mut child = Command::new(executable)
-            .args(["app-server", "--stdio"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|_| AppError::CodexProtocolFailed)?;
-        let stdout = child.stdout.take().ok_or(AppError::CodexProtocolFailed)?;
-        let mut stdin = child.stdin.take().ok_or(AppError::CodexProtocolFailed)?;
-        let (event_sender, event_receiver) = mpsc::sync_channel(EVENT_QUEUE_CAPACITY);
-        let reader_handle = thread::spawn(move || read_app_server_events(stdout, event_sender));
-        let task_result = run_app_server_task(&mut stdin, &event_receiver, query);
-        let termination_result = terminate_child(&mut child);
-        let reader_result = reader_handle
-            .join()
-            .map_err(|_| AppError::CodexProtocolFailed);
-
-        let output = task_result?;
-        termination_result?;
-        reader_result?;
-        Ok(output)
+        with_app_server(&executable, |stdin, event_receiver| {
+            run_app_server_task(stdin, event_receiver, query)
+        })
     }
 }
 
@@ -109,13 +104,23 @@ struct AppServerParams {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct AppServerResult {
     thread: Option<AppServerThread>,
+    model: Option<String>,
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct AppServerThread {
     id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexRuntimeDefaults {
+    thread_id: String,
+    model: String,
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,11 +176,53 @@ fn resolve_codex_executable() -> Result<OsString, AppError> {
     Err(AppError::CodexProbeFailed)
 }
 
-fn run_app_server_task(
+fn resolve_codex_runtime_defaults(executable: &OsStr) -> Result<CodexRuntimeDefaults, AppError> {
+    with_app_server(executable, initialize_app_server_thread)
+}
+
+fn with_app_server<T>(
+    executable: &OsStr,
+    operation: impl FnOnce(&mut ChildStdin, &Receiver<Result<String, AppError>>) -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    let mut child = Command::new(executable)
+        .args(["app-server", "--stdio"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| AppError::CodexProtocolFailed)?;
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            terminate_child(&mut child)?;
+            return Err(AppError::CodexProtocolFailed);
+        }
+    };
+    let mut stdin = match child.stdin.take() {
+        Some(stdin) => stdin,
+        None => {
+            terminate_child(&mut child)?;
+            return Err(AppError::CodexProtocolFailed);
+        }
+    };
+    let (event_sender, event_receiver) = mpsc::sync_channel(EVENT_QUEUE_CAPACITY);
+    let reader_handle = thread::spawn(move || read_app_server_events(stdout, event_sender));
+    let operation_result = operation(&mut stdin, &event_receiver);
+    let termination_result = terminate_child(&mut child);
+    let reader_result = reader_handle
+        .join()
+        .map_err(|_| AppError::CodexProtocolFailed);
+
+    let output = operation_result?;
+    termination_result?;
+    reader_result?;
+    Ok(output)
+}
+
+fn initialize_app_server_thread(
     stdin: &mut ChildStdin,
     event_receiver: &Receiver<Result<String, AppError>>,
-    query: &str,
-) -> Result<CodexRunOutput, AppError> {
+) -> Result<CodexRuntimeDefaults, AppError> {
     write_message(
         stdin,
         r#"{"method":"initialize","id":0,"params":{"clientInfo":{"name":"agent_gauge","title":"AgentGauge","version":"0.1.0"}}}"#,
@@ -187,16 +234,31 @@ fn run_app_server_task(
         r#"{"method":"thread/start","id":1,"params":{"approvalPolicy":"never","sandbox":"workspace-write","ephemeral":true,"serviceName":"agent_gauge"}}"#,
     )?;
     let thread_response = wait_for_response(event_receiver, 1, APP_SERVER_START_TIMEOUT)?;
-    let thread_id = thread_response
+    let result = thread_response
         .result
-        .and_then(|result| result.thread)
-        .map(|thread| thread.id)
         .ok_or(AppError::CodexProtocolFailed)?;
+
+    Ok(CodexRuntimeDefaults {
+        thread_id: result
+            .thread
+            .map(|thread| thread.id)
+            .ok_or(AppError::CodexProtocolFailed)?,
+        model: result.model.ok_or(AppError::CodexProtocolFailed)?,
+        reasoning_effort: result.reasoning_effort,
+    })
+}
+
+fn run_app_server_task(
+    stdin: &mut ChildStdin,
+    event_receiver: &Receiver<Result<String, AppError>>,
+    query: &str,
+) -> Result<CodexRunOutput, AppError> {
+    let runtime_defaults = initialize_app_server_thread(stdin, event_receiver)?;
     let turn_request = serde_json::json!({
         "method": "turn/start",
         "id": 2,
         "params": {
-            "threadId": thread_id,
+            "threadId": runtime_defaults.thread_id,
             "input": [{"type": "text", "text": query}]
         }
     });

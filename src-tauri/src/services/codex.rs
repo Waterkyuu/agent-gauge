@@ -11,6 +11,8 @@ pub(crate) fn check_codex_login(adapter: &impl CodexAdapter) -> Result<CodexLogi
         installed: authentication.installed,
         logged_in: authentication.logged_in,
         authentication_method: authentication.authentication_method,
+        model: authentication.model,
+        reasoning_effort: authentication.reasoning_effort,
     })
 }
 
@@ -55,6 +57,8 @@ mod tests {
                 installed: true,
                 logged_in: true,
                 authentication_method: Some("ChatGPT".to_string()),
+                model: Some("gpt-5.6-sol".to_string()),
+                reasoning_effort: Some("high".to_string()),
             },
         };
 
@@ -63,5 +67,7 @@ mod tests {
         assert!(status.installed);
         assert!(status.logged_in);
         assert_eq!(status.authentication_method.as_deref(), Some("ChatGPT"));
+        assert_eq!(status.model.as_deref(), Some("gpt-5.6-sol"));
+        assert_eq!(status.reasoning_effort.as_deref(), Some("high"));
     }
 }
