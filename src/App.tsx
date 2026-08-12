@@ -26,6 +26,12 @@ type ProcessState =
 	| { status: "resolved"; value: AgentProcessStates }
 	| { status: "failed" };
 
+const agentLoginChecks: Record<AgentKind, () => Promise<AgentRuntimeStatus>> = {
+	claude: checkClaudeLogin,
+	codex: checkCodexLogin,
+	workbuddy: checkWorkBuddyLogin,
+};
+
 /**
  * Formats a measured latency without hiding sub-second precision.
  *
@@ -79,46 +85,52 @@ const App = () => {
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 	useEffect(() => {
-		checkClaudeLogin()
-			.then((value) =>
-				setLoginStates((current) => ({
-					...current,
-					claude: { status: "resolved", value },
-				})),
-			)
-			.catch(() =>
-				setLoginStates((current) => ({
-					...current,
-					claude: { status: "failed" },
-				})),
-			);
-		checkCodexLogin()
-			.then((value) =>
-				setLoginStates((current) => ({
-					...current,
-					codex: { status: "resolved", value },
-				})),
-			)
-			.catch(() =>
-				setLoginStates((current) => ({
-					...current,
-					codex: { status: "failed" },
-				})),
-			);
-		checkWorkBuddyLogin()
-			.then((value) =>
-				setLoginStates((current) => ({
-					...current,
-					workbuddy: { status: "resolved", value },
-				})),
-			)
-			.catch(() =>
-				setLoginStates((current) => ({
-					...current,
-					workbuddy: { status: "failed" },
-				})),
-			);
-	}, []);
+		if (isRunning) {
+			return;
+		}
+
+		let isActive = true;
+		const pendingAgents = new Set<AgentKind>();
+
+		/** Refreshes every login state independently without overlapping probes. */
+		const refreshLoginStates = () => {
+			for (const agent of Object.keys(agentLoginChecks) as AgentKind[]) {
+				if (pendingAgents.has(agent)) {
+					continue;
+				}
+
+				pendingAgents.add(agent);
+				agentLoginChecks[agent]()
+					.then((value) => {
+						if (isActive) {
+							setLoginStates((current) => ({
+								...current,
+								[agent]: { status: "resolved", value },
+							}));
+						}
+					})
+					.catch(() => {
+						if (isActive) {
+							setLoginStates((current) => ({
+								...current,
+								[agent]: { status: "failed" },
+							}));
+						}
+					})
+					.finally(() => pendingAgents.delete(agent));
+			}
+		};
+
+		refreshLoginStates();
+		const intervalId = window.setInterval(refreshLoginStates, 5000);
+		window.addEventListener("focus", refreshLoginStates);
+
+		return () => {
+			isActive = false;
+			window.clearInterval(intervalId);
+			window.removeEventListener("focus", refreshLoginStates);
+		};
+	}, [isRunning]);
 
 	useEffect(() => {
 		let isActive = true;

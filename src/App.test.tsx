@@ -107,6 +107,39 @@ describe("App", () => {
 		expect(processProbeCount).toBeGreaterThanOrEqual(2);
 	});
 
+	// Verifies that authentication changes refresh while the UI remains open.
+	it("refreshes the selected agent authentication state", async () => {
+		let codexLoggedIn = false;
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				return Promise.resolve({
+					claude: false,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			return Promise.resolve({
+				installed: true,
+				loggedIn: command === "check_codex_login" ? codexLoggedIn : true,
+				authenticationMethod: "ChatGPT",
+				model: "gpt-5.6-sol",
+				reasoningEffort: "high",
+			});
+		});
+
+		render(<App />);
+		expect(
+			await screen.findByText("本地 Codex 尚未登录。"),
+		).toBeInTheDocument();
+
+		codexLoggedIn = true;
+		window.dispatchEvent(new Event("focus"));
+
+		expect(
+			await screen.findByText("Codex：已就绪，未运行"),
+		).toBeInTheDocument();
+	});
+
 	// Verifies the query submission and completed metric presentation.
 	it("submits a query and displays the completed metrics", async () => {
 		invokeMock.mockImplementation((command: string) => {
@@ -154,7 +187,7 @@ describe("App", () => {
 		await user.click(screen.getByRole("button", { name: "发送给 Codex" }));
 
 		await waitFor(() => {
-			expect(invokeMock).toHaveBeenLastCalledWith("run_codex_task", {
+			expect(invokeMock).toHaveBeenCalledWith("run_codex_task", {
 				request: { query: "只回复任务完成" },
 			});
 		});
@@ -201,7 +234,7 @@ describe("App", () => {
 		await user.click(screen.getByRole("button", { name: "发送给 WorkBuddy" }));
 
 		await waitFor(() => {
-			expect(invokeMock).toHaveBeenLastCalledWith("run_workbuddy_task", {
+			expect(invokeMock).toHaveBeenCalledWith("run_workbuddy_task", {
 				request: { query: "只回复 OK" },
 			});
 		});
@@ -249,7 +282,7 @@ describe("App", () => {
 		);
 
 		await waitFor(() => {
-			expect(invokeMock).toHaveBeenLastCalledWith("run_claude_task", {
+			expect(invokeMock).toHaveBeenCalledWith("run_claude_task", {
 				request: { query: "只回复 OK" },
 			});
 		});
