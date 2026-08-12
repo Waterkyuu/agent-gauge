@@ -2,7 +2,7 @@ import { Check, Terminal } from "@gravity-ui/icons";
 import { cn } from "cnfast";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import type { AgentKind, AgentRuntimeStatus } from "../../../types/agent";
+import type { AgentKind, AgentRuntimeStatus } from "@/types/agent";
 
 type AgentSelectionCardProps = {
 	/** Product represented by this comparison target. */

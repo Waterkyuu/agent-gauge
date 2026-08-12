@@ -9,10 +9,7 @@ import { Card } from "@heroui/react";
 import { cn } from "cnfast";
 import type { ComponentType, SVGProps } from "react";
 import { useTranslation } from "react-i18next";
-import {
-	RUN_BOARD_ITEMS,
-	type RunBoardStatus,
-} from "../../constants/run-board";
+import { RUN_BOARD_ITEMS, type RunBoardStatus } from "@/constants/run-board";
 
 type StatusPresentation = {
 	/** Icon rendered beside the status name. */
