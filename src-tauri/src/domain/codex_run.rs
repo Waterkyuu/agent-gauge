@@ -7,29 +7,29 @@ pub(crate) struct TokenUsage {
     pub(crate) cached_input_tokens: u64,
     pub(crate) cache_write_input_tokens: u64,
     pub(crate) output_tokens: u64,
-    pub(crate) reasoning_output_tokens: u64,
+    pub(crate) reasoning_output_tokens: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CodexRunMetrics {
+pub(crate) struct AgentRunMetrics {
     pub(crate) total_duration: Duration,
     pub(crate) time_to_first_token: Option<Duration>,
     pub(crate) token_usage: Option<TokenUsage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CodexRunOutput {
+pub(crate) struct AgentRunOutput {
     pub(crate) response: String,
-    pub(crate) metrics: CodexRunMetrics,
+    pub(crate) metrics: AgentRunMetrics,
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct CodexRunMetricsCollector {
+pub(crate) struct AgentRunMetricsCollector {
     time_to_first_token: Option<Duration>,
     token_usage: Option<TokenUsage>,
 }
 
-impl CodexRunMetricsCollector {
+impl AgentRunMetricsCollector {
     /// Captures the first non-empty streamed assistant content observation.
     pub(crate) fn record_agent_delta(&mut self, delta: &str, elapsed: Duration) {
         if self.time_to_first_token.is_none() && !delta.is_empty() {
@@ -43,8 +43,8 @@ impl CodexRunMetricsCollector {
     }
 
     /// Finalizes the immutable metric snapshot when app-server reports turn completion.
-    pub(crate) fn finish(self, total_duration: Duration) -> CodexRunMetrics {
-        CodexRunMetrics {
+    pub(crate) fn finish(self, total_duration: Duration) -> AgentRunMetrics {
+        AgentRunMetrics {
             total_duration,
             time_to_first_token: self.time_to_first_token,
             token_usage: self.token_usage,
@@ -54,12 +54,12 @@ impl CodexRunMetricsCollector {
 
 #[cfg(test)]
 mod tests {
-    use super::{CodexRunMetricsCollector, TokenUsage};
+    use super::{AgentRunMetricsCollector, TokenUsage};
     use std::time::Duration;
 
     #[test]
     fn records_first_non_empty_agent_delta_once() {
-        let mut collector = CodexRunMetricsCollector::default();
+        let mut collector = AgentRunMetricsCollector::default();
 
         collector.record_agent_delta("", Duration::from_millis(40));
         collector.record_agent_delta("首", Duration::from_millis(75));
@@ -72,14 +72,14 @@ mod tests {
 
     #[test]
     fn returns_duration_and_latest_turn_token_usage() {
-        let mut collector = CodexRunMetricsCollector::default();
+        let mut collector = AgentRunMetricsCollector::default();
         let usage = TokenUsage {
             total_tokens: 120,
             input_tokens: 80,
             cached_input_tokens: 40,
             cache_write_input_tokens: 0,
             output_tokens: 30,
-            reasoning_output_tokens: 10,
+            reasoning_output_tokens: Some(10),
         };
 
         collector.record_token_usage(usage.clone());

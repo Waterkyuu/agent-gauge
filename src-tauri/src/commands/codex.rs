@@ -1,5 +1,5 @@
 use crate::adapters::codex::SystemCodexAdapter;
-use crate::domain::codex_run::{CodexRunMetrics, CodexRunOutput, TokenUsage};
+use crate::domain::codex_run::{AgentRunMetrics, AgentRunOutput, TokenUsage};
 use crate::dto::codex::CodexLoginStatus;
 use crate::error::{AppError, IpcError};
 use crate::services::codex::{
@@ -30,7 +30,7 @@ pub struct TokenUsageResponse {
     /// Tokens included in the model output.
     output_tokens: u64,
     /// Output tokens consumed by model reasoning.
-    reasoning_output_tokens: u64,
+    reasoning_output_tokens: Option<u64>,
 }
 
 /// Completed response and latency metrics for one local Codex turn.
@@ -60,9 +60,9 @@ impl From<TokenUsage> for TokenUsageResponse {
     }
 }
 
-impl From<CodexRunOutput> for RunCodexTaskResponse {
-    fn from(output: CodexRunOutput) -> Self {
-        let CodexRunMetrics {
+impl From<AgentRunOutput> for RunCodexTaskResponse {
+    fn from(output: AgentRunOutput) -> Self {
+        let AgentRunMetrics {
             total_duration,
             time_to_first_token,
             token_usage,

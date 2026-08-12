@@ -1,5 +1,6 @@
+use crate::adapters::agent::AgentAdapter;
 use crate::adapters::codex::CodexAdapter;
-use crate::domain::codex_run::CodexRunOutput;
+use crate::domain::codex_run::AgentRunOutput;
 use crate::dto::codex::CodexLoginStatus;
 use crate::error::AppError;
 
@@ -18,9 +19,9 @@ pub(crate) fn check_codex_login(adapter: &impl CodexAdapter) -> Result<CodexLogi
 
 /// Runs one Codex task after enforcing the bounded MVP query contract.
 pub(crate) fn run_codex_task(
-    adapter: &impl CodexAdapter,
+    adapter: &impl AgentAdapter,
     query: &str,
-) -> Result<CodexRunOutput, AppError> {
+) -> Result<AgentRunOutput, AppError> {
     if query.trim().is_empty() || query.len() > 16_000 {
         return Err(AppError::InvalidQuery);
     }
@@ -30,6 +31,7 @@ pub(crate) fn run_codex_task(
 
 #[cfg(test)]
 mod tests {
+    use crate::adapters::agent::AgentAdapter;
     use crate::adapters::codex::{CodexAdapter, CodexAuthentication};
     use crate::error::AppError;
 
@@ -41,11 +43,13 @@ mod tests {
         fn check_authentication(&self) -> Result<CodexAuthentication, AppError> {
             Ok(self.authentication.clone())
         }
+    }
 
+    impl AgentAdapter for FakeCodexAdapter {
         fn run_task(
             &self,
             _query: &str,
-        ) -> Result<crate::domain::codex_run::CodexRunOutput, AppError> {
+        ) -> Result<crate::domain::codex_run::AgentRunOutput, AppError> {
             Err(AppError::CodexTaskFailed)
         }
     }

@@ -1,4 +1,5 @@
-use crate::domain::codex_run::{CodexRunMetricsCollector, CodexRunOutput, TokenUsage};
+use crate::adapters::agent::AgentAdapter;
+use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
 use serde::Deserialize;
 use std::ffi::{OsStr, OsString};
@@ -24,7 +25,6 @@ pub(crate) struct CodexAuthentication {
 
 pub(crate) trait CodexAdapter {
     fn check_authentication(&self) -> Result<CodexAuthentication, AppError>;
-    fn run_task(&self, query: &str) -> Result<CodexRunOutput, AppError>;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -78,8 +78,10 @@ impl CodexAdapter for SystemCodexAdapter {
             reasoning_effort: None,
         })
     }
+}
 
-    fn run_task(&self, query: &str) -> Result<CodexRunOutput, AppError> {
+impl AgentAdapter for SystemCodexAdapter {
+    fn run_task(&self, query: &str) -> Result<AgentRunOutput, AppError> {
         let executable = resolve_codex_executable()?;
         with_app_server(&executable, |stdin, event_receiver| {
             run_app_server_task(stdin, event_receiver, query)
@@ -152,7 +154,7 @@ impl From<TokenUsageBreakdown> for TokenUsage {
             cached_input_tokens: usage.cached_input_tokens,
             cache_write_input_tokens: usage.cache_write_input_tokens,
             output_tokens: usage.output_tokens,
-            reasoning_output_tokens: usage.reasoning_output_tokens,
+            reasoning_output_tokens: Some(usage.reasoning_output_tokens),
         }
     }
 }
@@ -252,7 +254,7 @@ fn run_app_server_task(
     stdin: &mut ChildStdin,
     event_receiver: &Receiver<Result<String, AppError>>,
     query: &str,
-) -> Result<CodexRunOutput, AppError> {
+) -> Result<AgentRunOutput, AppError> {
     let runtime_defaults = initialize_app_server_thread(stdin, event_receiver)?;
     let turn_request = serde_json::json!({
         "method": "turn/start",
@@ -271,8 +273,8 @@ fn run_app_server_task(
 fn collect_run_events(
     event_receiver: &Receiver<Result<String, AppError>>,
     started_at: Instant,
-) -> Result<CodexRunOutput, AppError> {
-    let mut collector = CodexRunMetricsCollector::default();
+) -> Result<AgentRunOutput, AppError> {
+    let mut collector = AgentRunMetricsCollector::default();
     let mut response = String::new();
 
     loop {
@@ -304,7 +306,7 @@ fn collect_run_events(
                     return Err(AppError::CodexTaskFailed);
                 }
 
-                return Ok(CodexRunOutput {
+                return Ok(AgentRunOutput {
                     response,
                     metrics: collector.finish(started_at.elapsed()),
                 });

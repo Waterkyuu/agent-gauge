@@ -1,4 +1,5 @@
 mod adapters {
+    pub(crate) mod agent;
     pub(crate) mod codex;
 }
 mod commands {
