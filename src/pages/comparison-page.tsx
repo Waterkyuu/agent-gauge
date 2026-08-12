@@ -1,4 +1,5 @@
-import { Button } from "@heroui/react";
+import { MagicWand, Play, Sparkles } from "@gravity-ui/icons";
+import { Button, Card, Chip, TextArea } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -87,55 +88,55 @@ const resolveAgentStatus = (
 	if (loginState.status === "checking") {
 		return {
 			message: t("checkingLogin", { agent: agentName }),
-			tone: "bg-amber-400",
+			tone: "bg-zinc-400",
 			isReady: false,
 		};
 	}
 	if (loginState.status === "failed") {
 		return {
 			message: t("loginCheckFailed", { agent: agentName }),
-			tone: "bg-rose-400",
+			tone: "bg-zinc-300",
 			isReady: false,
 		};
 	}
 	if (!loginState.value.installed) {
 		return {
 			message: t("notInstalled", { agent: agentName }),
-			tone: "bg-rose-400",
+			tone: "bg-zinc-300",
 			isReady: false,
 		};
 	}
 	if (!loginState.value.loggedIn) {
 		return {
 			message: t("notLoggedIn", { agent: agentName }),
-			tone: "bg-rose-400",
+			tone: "bg-zinc-300",
 			isReady: false,
 		};
 	}
 	if (processState.status === "checking") {
 		return {
 			message: t("checkingProcess", { agent: agentName }),
-			tone: "bg-amber-400",
+			tone: "bg-zinc-400",
 			isReady: true,
 		};
 	}
 	if (processState.status === "failed") {
 		return {
 			message: t("processCheckFailed", { agent: agentName }),
-			tone: "bg-rose-400",
+			tone: "bg-zinc-300",
 			isReady: true,
 		};
 	}
 	if (processState.value[agent]) {
 		return {
 			message: t("agentRunning", { agent: agentName }),
-			tone: "bg-emerald-400",
+			tone: "bg-black",
 			isReady: true,
 		};
 	}
 	return {
 		message: t("agentReady", { agent: agentName }),
-		tone: "bg-sky-400",
+		tone: "bg-zinc-500",
 		isReady: true,
 	};
 };
@@ -274,11 +275,6 @@ const ComparisonPage = () => {
 	);
 	const numberLocale = i18n.resolvedLanguage ?? "en-US";
 
-	/** Changes and persists the active UI language through i18next. */
-	const changeLanguage = async (language: "en-US" | "zh-CN") => {
-		await i18n.changeLanguage(language);
-	};
-
 	/**
 	 * Includes or excludes one ready product from the next comparison run.
 	 *
@@ -353,46 +349,50 @@ const ComparisonPage = () => {
 	};
 
 	return (
-		<main className="min-h-screen bg-slate-950 px-5 py-10 text-white sm:px-8">
-			<section className="mx-auto max-w-7xl">
-				<header className="mb-8">
-					<div className="mb-8 flex items-center justify-between gap-4">
-						<p className="font-semibold tracking-tight">{t("appName")}</p>
-						<fieldset
-							aria-label={t("languageSelection")}
-							className="inline-flex gap-1 rounded-lg border border-white/10 bg-white/5 p-1"
-						>
-							{(["zh-CN", "en-US"] as const).map((language) => (
-								<button
-									aria-pressed={i18n.resolvedLanguage === language}
-									className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:text-white aria-pressed:bg-white/10 aria-pressed:text-white"
-									key={language}
-									onClick={() => changeLanguage(language)}
-									type="button"
-								>
-									{t(
-										language === "zh-CN" ? "languages.zhCN" : "languages.enUS",
-									)}
-								</button>
-							))}
-						</fieldset>
+		<main className="relative overflow-hidden">
+			<div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[520px] bg-[radial-gradient(circle_at_72%_12%,rgba(0,0,0,0.055),transparent_34%),linear-gradient(to_bottom,#fafafa,white)]" />
+			<section className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-10 lg:py-16">
+				<header className="mb-12 grid items-end gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
+					<div>
+						<Chip className="mb-5" size="sm" variant="soft">
+							<Sparkles aria-hidden="true" className="size-3.5" />
+							{t("tagline")}
+						</Chip>
+						<h1 className="max-w-4xl text-5xl font-bold leading-[0.98] tracking-[-0.055em] sm:text-6xl lg:text-7xl">
+							{t("title")}
+						</h1>
+						<p className="mt-6 max-w-2xl text-base leading-7 text-zinc-500 sm:text-lg">
+							{t("description")}
+						</p>
 					</div>
-					<p className="mb-2 text-sm font-medium text-indigo-300">
-						{t("tagline")}
-					</p>
-					<h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">
-						{t("title")}
-					</h1>
-					<p className="mt-4 max-w-3xl leading-7 text-slate-400">
-						{t("description")}
-					</p>
+					<Card className="border border-zinc-200 bg-black text-white shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
+						<Card.Content className="p-6">
+							<div className="flex items-center justify-between">
+								<span className="grid size-10 place-items-center rounded-xl bg-white text-black">
+									<MagicWand aria-hidden="true" className="size-5" />
+								</span>
+								<span className="font-mono text-xs text-zinc-500">01 / 03</span>
+							</div>
+							<p className="mt-8 text-sm font-semibold">
+								{t("agentSelection")}
+							</p>
+							<p className="mt-2 text-xs leading-5 text-zinc-400">
+								{t("selectedAgents", { count: runnableAgents.length })}
+							</p>
+						</Card.Content>
+					</Card>
 				</header>
 
-				<fieldset aria-label={t("agentSelection")} className="mb-6">
-					<legend className="mb-3 text-sm font-medium text-slate-300">
-						{t("agentSelection")}
-					</legend>
-					<div className="grid gap-3 md:grid-cols-3">
+				<fieldset aria-label={t("agentSelection")} className="mb-8">
+					<div className="mb-4 flex items-center justify-between gap-4">
+						<legend className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
+							{t("agentSelection")}
+						</legend>
+						<span className="text-xs font-medium text-zinc-400">
+							{t("selectedAgents", { count: runnableAgents.length })}
+						</span>
+					</div>
+					<div className="grid gap-4 md:grid-cols-3">
 						{AGENT_KINDS.map((agent) => {
 							const loginState = loginStates[agent];
 							const runtimeStatus =
@@ -416,54 +416,64 @@ const ComparisonPage = () => {
 					</div>
 				</fieldset>
 
-				<form
-					className="rounded-2xl border border-white/10 bg-white/5 p-5"
-					onSubmit={onSubmit}
-				>
-					<label
-						className="mb-2 block text-sm font-medium"
-						htmlFor="agent-query"
-					>
-						{t("queryLabel")}
-					</label>
-					<textarea
-						className="min-h-32 w-full resize-y rounded-xl border border-white/10 bg-slate-950/80 p-4 text-sm leading-6 text-slate-100 outline-none transition focus:border-indigo-400"
-						disabled={isRunning}
-						id="agent-query"
-						maxLength={16000}
-						onChange={(event) => setQuery(event.target.value)}
-						placeholder={t("queryPlaceholder")}
-						value={query}
-					/>
-					<div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-						<p className="text-xs text-slate-400">
-							{t("selectedAgents", { count: runnableAgents.length })}
-						</p>
-						<Button
-							isDisabled={
-								isRunning ||
-								query.trim().length === 0 ||
-								runnableAgents.length === 0
-							}
-							type="submit"
-							variant="primary"
-						>
-							{isRunning
-								? t("comparingAgents", { count: runnableAgents.length })
-								: t("compareAgents", { count: runnableAgents.length })}
-						</Button>
-					</div>
-				</form>
+				<Card className="overflow-hidden border border-zinc-200 bg-white shadow-[0_16px_50px_rgba(0,0,0,0.055)]">
+					<form onSubmit={onSubmit}>
+						<Card.Header className="flex items-center gap-3 border-b border-zinc-100 px-5 py-4 sm:px-6">
+							<span className="grid size-9 place-items-center rounded-xl bg-zinc-100 text-black">
+								<MagicWand aria-hidden="true" className="size-[18px]" />
+							</span>
+							<div>
+								<p className="text-sm font-bold">{t("queryLabel")}</p>
+								<p className="mt-0.5 text-xs text-zinc-400">02 / 03</p>
+							</div>
+						</Card.Header>
+						<Card.Content className="p-4 sm:p-6">
+							<label className="sr-only" htmlFor="agent-query">
+								{t("queryLabel")}
+							</label>
+							<TextArea
+								className="min-h-36 w-full resize-y rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-900 outline-none transition focus:border-black focus:bg-white focus:ring-4 focus:ring-zinc-100"
+								disabled={isRunning}
+								id="agent-query"
+								maxLength={16000}
+								onChange={(event) => setQuery(event.target.value)}
+								placeholder={t("queryPlaceholder")}
+								value={query}
+								variant="secondary"
+							/>
+						</Card.Content>
+						<Card.Footer className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-4 sm:px-6">
+							<p className="text-xs font-medium text-zinc-400">
+								{t("selectedAgents", { count: runnableAgents.length })}
+							</p>
+							<Button
+								className="rounded-xl bg-black px-5 text-white shadow-lg shadow-black/10"
+								isDisabled={
+									isRunning ||
+									query.trim().length === 0 ||
+									runnableAgents.length === 0
+								}
+								type="submit"
+								variant="primary"
+							>
+								<Play aria-hidden="true" className="size-4" />
+								{isRunning
+									? t("comparingAgents", { count: runnableAgents.length })
+									: t("compareAgents", { count: runnableAgents.length })}
+							</Button>
+						</Card.Footer>
+					</form>
+				</Card>
 
 				{comparisonAgents.length > 0 ? (
-					<section className="mt-8" aria-labelledby="comparison-title">
+					<section className="mt-12" aria-labelledby="comparison-title">
 						<h2
-							className="mb-4 text-sm font-medium text-slate-300"
+							className="mb-5 text-xs font-bold uppercase tracking-[0.16em] text-zinc-500"
 							id="comparison-title"
 						>
 							{t("comparisonTitle")}
 						</h2>
-						<div className="grid items-start gap-4 lg:grid-cols-3">
+						<div className="grid items-start gap-4 xl:grid-cols-3">
 							{comparisonAgents.map((agent) => {
 								const runState = runStates[agent];
 

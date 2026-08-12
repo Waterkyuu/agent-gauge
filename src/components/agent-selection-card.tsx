@@ -57,35 +57,68 @@ const AgentSelectionCard = ({
 		<button
 			aria-label={t(`agentNames.${agent}`)}
 			aria-pressed={isSelected}
-			className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-60 aria-pressed:border-indigo-400 aria-pressed:bg-indigo-500/10"
+			className="group block w-full rounded-2xl text-left outline-none ring-black transition focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
 			disabled={isDisabled}
 			onClick={() => onToggle(agent)}
 			type="button"
 		>
-			<div className="flex items-center justify-between gap-3">
-				<span className="font-semibold">{t(`agentNames.${agent}`)}</span>
-				<span
-					aria-hidden="true"
-					className={`size-2 rounded-full ${statusTone}`}
-				/>
-			</div>
-			<p className="mt-2 text-xs text-slate-400">{statusMessage}</p>
-			<div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
-				<div>
-					<p className="text-[11px] text-slate-500">{t("currentModel")}</p>
-					<p className="mt-1 truncate text-xs text-slate-200">
-						{runtimeStatus?.model ?? t("metricUnavailable")}
+			<Card
+				className={cn(
+					"h-full overflow-hidden border border-zinc-200 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.035)] transition group-hover:-translate-y-0.5 group-hover:border-zinc-400 group-hover:shadow-[0_14px_38px_rgba(0,0,0,0.07)]",
+					isSelected && "border-black ring-1 ring-black",
+				)}
+			>
+				<Card.Content className="p-5">
+					<div className="flex items-start justify-between gap-3">
+						<span className="grid size-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50">
+							<Terminal aria-hidden="true" className="size-5" />
+						</span>
+						<span
+							className={cn(
+								"grid size-6 place-items-center rounded-full border border-zinc-200 text-transparent transition",
+								isSelected && "border-black bg-black text-white",
+							)}
+						>
+							<Check aria-hidden="true" className="size-3.5" />
+						</span>
+					</div>
+					<div className="mt-5 flex items-center gap-2">
+						<span className="text-base font-bold tracking-[-0.02em]">
+							{t(`agentNames.${agent}`)}
+						</span>
+						<span
+							aria-hidden="true"
+							className={cn("size-2 rounded-full", statusTone)}
+						/>
+					</div>
+					<p className="mt-1.5 min-h-8 text-xs leading-4 text-zinc-500">
+						{statusMessage}
 					</p>
-				</div>
-				<div>
-					<p className="text-[11px] text-slate-500">{t("reasoningEffort")}</p>
-					<p className="mt-1 truncate text-xs text-slate-200">
-						{formatReasoningEffort(runtimeStatus?.reasoningEffort ?? null, t)}
-					</p>
-				</div>
-			</div>
+				</Card.Content>
+				<Card.Footer className="grid grid-cols-2 gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-4">
+					<div className="min-w-0">
+						<p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+							{t("currentModel")}
+						</p>
+						<p className="mt-1.5 truncate text-xs font-semibold text-zinc-700">
+							{runtimeStatus?.model ?? t("metricUnavailable")}
+						</p>
+					</div>
+					<div className="min-w-0 border-l border-zinc-200 pl-3">
+						<p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+							{t("reasoningEffort")}
+						</p>
+						<p className="mt-1.5 truncate text-xs font-semibold text-zinc-700">
+							{formatReasoningEffort(runtimeStatus?.reasoningEffort ?? null, t)}
+						</p>
+					</div>
+				</Card.Footer>
+			</Card>
 		</button>
 	);
 };
 
 export { AgentSelectionCard };
+
+import { Check, Terminal } from "@gravity-ui/icons";
+import { Card, cn } from "@heroui/react";

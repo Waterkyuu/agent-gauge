@@ -79,28 +79,24 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 						</Button>
 					</nav>
 
-					{currentPath === "/runs" ? (
-						<div className="ml-1 flex items-center gap-1 border-l border-zinc-200 pl-2">
-							<Globe
-								aria-hidden="true"
-								className="hidden size-4 text-zinc-400 md:block"
-							/>
-							{(["zh-CN", "en-US"] as const).map((language) => (
-								<Button
-									aria-pressed={i18n.resolvedLanguage === language}
-									className="min-w-0 rounded-lg px-2 text-xs text-zinc-500 aria-pressed:bg-black aria-pressed:text-white"
-									key={language}
-									onPress={() => changeLanguage(language)}
-									size="sm"
-									variant="ghost"
-								>
-									{t(
-										language === "zh-CN" ? "languages.zhCN" : "languages.enUS",
-									)}
-								</Button>
-							))}
-						</div>
-					) : null}
+					<div className="ml-1 flex items-center gap-1 border-l border-zinc-200 pl-2">
+						<Globe
+							aria-hidden="true"
+							className="hidden size-4 text-zinc-400 md:block"
+						/>
+						{(["zh-CN", "en-US"] as const).map((language) => (
+							<Button
+								aria-pressed={i18n.resolvedLanguage === language}
+								className="min-w-0 rounded-lg px-2 text-xs text-zinc-500 aria-pressed:bg-black aria-pressed:text-white"
+								key={language}
+								onPress={() => changeLanguage(language)}
+								size="sm"
+								variant="ghost"
+							>
+								{t(language === "zh-CN" ? "languages.zhCN" : "languages.enUS")}
+							</Button>
+						))}
+					</div>
 				</div>
 			</header>
 			{children}

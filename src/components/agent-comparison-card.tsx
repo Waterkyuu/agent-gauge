@@ -44,30 +44,41 @@ const AgentComparisonCard = ({
 	const titleId = `comparison-${agent}-title`;
 
 	return (
-		<article
+		<Card
 			aria-labelledby={titleId}
-			className="rounded-2xl border border-white/10 bg-white/5 p-5"
+			className="overflow-hidden border border-zinc-200 bg-white shadow-[0_12px_38px_rgba(0,0,0,0.045)]"
+			role="article"
 		>
-			<div className="flex items-center justify-between gap-3">
-				<h3 className="font-semibold" id={titleId}>
+			<Card.Header className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
+				<h3 className="text-sm font-bold" id={titleId}>
 					{t("comparisonResult", { agent: t(`agentNames.${agent}`) })}
 				</h3>
 				{isRunning ? (
-					<span className="text-xs text-indigo-300">
+					<Chip size="sm" variant="soft">
+						<Spinner size="sm" />
 						{t("agentRunRunning")}
-					</span>
+					</Chip>
+				) : result ? (
+					<CircleCheck aria-hidden="true" className="size-5 text-zinc-500" />
 				) : null}
-			</div>
+			</Card.Header>
 
 			{errorMessage ? (
-				<p className="mt-5 text-sm text-rose-300" role="alert">
-					{errorMessage}
-				</p>
+				<Card.Content
+					className="flex gap-3 p-5 text-sm text-zinc-600"
+					role="alert"
+				>
+					<TriangleExclamation
+						aria-hidden="true"
+						className="mt-0.5 size-4 shrink-0"
+					/>
+					<p>{errorMessage}</p>
+				</Card.Content>
 			) : null}
 
 			{result ? (
-				<>
-					<div className="mt-5 grid grid-cols-3 gap-2">
+				<Card.Content className="p-5">
+					<div className="grid grid-cols-3 divide-x divide-zinc-200 rounded-xl border border-zinc-200 bg-zinc-50">
 						{[
 							[
 								t("firstToken"),
@@ -82,14 +93,16 @@ const AgentComparisonCard = ({
 									t("metricUnavailable"),
 							],
 						].map(([label, value]) => (
-							<div className="rounded-xl bg-slate-950/60 p-3" key={label}>
-								<p className="text-[11px] text-slate-500">{label}</p>
-								<p className="mt-2 font-semibold tabular-nums">{value}</p>
+							<div className="min-w-0 p-3" key={label}>
+								<p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+									{label}
+								</p>
+								<p className="mt-2 text-sm font-bold tabular-nums">{value}</p>
 							</div>
 						))}
 					</div>
 					{result.tokenUsage ? (
-						<p className="mt-3 text-xs text-slate-500">
+						<p className="mt-3 text-[11px] leading-5 text-zinc-400">
 							{t("inputTokens")}{" "}
 							{result.tokenUsage.inputTokens.toLocaleString(numberLocale)} ·{" "}
 							{t("outputTokens")}{" "}
@@ -100,18 +113,22 @@ const AgentComparisonCard = ({
 							) ?? t("metricUnavailable")}
 						</p>
 					) : null}
-					<div className="mt-5 border-t border-white/10 pt-4">
-						<p className="mb-2 text-xs font-medium text-slate-400">
+					<div className="mt-5 border-t border-zinc-100 pt-4">
+						<p className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400">
+							<Clock aria-hidden="true" className="size-3.5" />
 							{t("responseTitle")}
 						</p>
-						<pre className="m-0 max-h-80 overflow-auto whitespace-pre-wrap font-sans text-sm leading-6 text-slate-200">
+						<pre className="m-0 max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-zinc-950 p-4 font-sans text-sm leading-6 text-zinc-200">
 							{result.response}
 						</pre>
 					</div>
-				</>
+				</Card.Content>
 			) : null}
-		</article>
+		</Card>
 	);
 };
 
 export { AgentComparisonCard };
+
+import { CircleCheck, Clock, TriangleExclamation } from "@gravity-ui/icons";
+import { Card, Chip, Spinner } from "@heroui/react";
