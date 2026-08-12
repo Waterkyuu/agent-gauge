@@ -62,7 +62,8 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 							<Button
 								className={cn(
 									"w-full justify-start rounded-lg px-3 text-sm text-[var(--app-muted)]",
-									isActive && "bg-zinc-900 font-semibold text-zinc-50",
+									isActive &&
+										"bg-[var(--app-hover)] font-semibold text-[var(--app-ink)]",
 								)}
 								key={item.path}
 								onPress={() => onNavigate(item.path)}
@@ -84,7 +85,7 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 						{(["zh-CN", "en-US"] as const).map((language) => (
 							<Button
 								aria-pressed={i18n.resolvedLanguage === language}
-								className="min-w-0 rounded-md px-2 text-xs text-[var(--app-muted)] aria-pressed:bg-[var(--app-surface)] aria-pressed:text-[var(--app-ink)] aria-pressed:shadow-[0_1px_2px_rgba(24,24,23,0.08)]"
+								className="w-full min-w-0 rounded-md px-2 text-xs text-[var(--app-muted)] aria-pressed:bg-[var(--app-surface)] aria-pressed:text-[var(--app-ink)] aria-pressed:shadow-[0_1px_2px_rgba(24,24,23,0.08)]"
 								key={language}
 								onPress={() => changeLanguage(language)}
 								size="sm"
