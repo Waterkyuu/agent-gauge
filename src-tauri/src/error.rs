@@ -11,6 +11,7 @@ pub(crate) enum AppError {
     CodexProtocolFailed,
     CodexTaskFailed,
     CodexTimedOut,
+    ProcessProbeFailed,
     WorkBuddyNotInstalled,
     WorkBuddyProbeFailed,
     WorkBuddyProtocolFailed,
@@ -68,6 +69,10 @@ impl From<AppError> for IpcError {
             AppError::CodexTimedOut => Self {
                 code: "CODEX_TIMED_OUT",
                 message: "等待 Codex 完成任务超时。",
+            },
+            AppError::ProcessProbeFailed => Self {
+                code: "PROCESS_PROBE_FAILED",
+                message: "无法读取本地 Agent 运行状态。",
             },
             AppError::WorkBuddyNotInstalled => Self {
                 code: "WORKBUDDY_NOT_INSTALLED",
