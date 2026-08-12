@@ -134,6 +134,9 @@ describe("App", () => {
 				name: /Agent 运行看板|Agent run board/,
 			}),
 		).toBeInTheDocument();
+		expect(
+			screen.getByRole("heading", { name: /等待用户|Awaiting user/ }),
+		).toBeInTheDocument();
 
 		window.history.pushState({}, "", "/unsupported");
 		window.dispatchEvent(new PopStateEvent("popstate"));

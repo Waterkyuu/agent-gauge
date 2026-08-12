@@ -1,5 +1,6 @@
 import {
 	CircleCheck,
+	CircleQuestion,
 	Clock,
 	Play,
 	TriangleExclamation,
@@ -18,12 +19,21 @@ type StatusPresentation = {
 	iconClassName: string;
 };
 
-const BOARD_STATUSES: RunBoardStatus[] = ["running", "finish", "error"];
+const BOARD_STATUSES: RunBoardStatus[] = [
+	"running",
+	"waiting",
+	"finish",
+	"error",
+];
 
 const STATUS_PRESENTATIONS: Record<RunBoardStatus, StatusPresentation> = {
 	running: {
 		icon: Play,
 		iconClassName: "bg-zinc-900 text-zinc-50",
+	},
+	waiting: {
+		icon: CircleQuestion,
+		iconClassName: "bg-zinc-800 text-zinc-50",
 	},
 	finish: {
 		icon: CircleCheck,
@@ -35,7 +45,7 @@ const STATUS_PRESENTATIONS: Record<RunBoardStatus, StatusPresentation> = {
 	},
 };
 
-/** Renders the three-column status board with localized mock runs. */
+/** Renders the four-state run board with localized mock runs. */
 const RunBoardPage = () => {
 	const { t } = useTranslation();
 
@@ -50,7 +60,7 @@ const RunBoardPage = () => {
 				</p>
 			</header>
 
-			<div className="grid overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] lg:grid-cols-3">
+			<div className="grid overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] lg:grid-cols-2 xl:grid-cols-4">
 				{BOARD_STATUSES.map((status) => {
 					const presentation = STATUS_PRESENTATIONS[status];
 					const StatusIcon = presentation.icon;
@@ -61,7 +71,7 @@ const RunBoardPage = () => {
 					return (
 						<section
 							aria-labelledby={`board-${status}`}
-							className="min-w-0 border-b border-[var(--app-line)] last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0"
+							className="min-w-0 border-b border-[var(--app-line)] lg:border-r lg:[&:nth-child(2n)]:border-r-0 lg:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-child(2n)]:border-r xl:[&:nth-child(4n)]:border-r-0 xl:[&:nth-last-child(-n+4)]:border-b-0"
 							key={status}
 						>
 							<header className="flex items-center justify-between gap-4 border-b border-[var(--app-line)] px-4 py-3.5">

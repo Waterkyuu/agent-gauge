@@ -68,15 +68,17 @@ const zhCN = {
 		runBoard: {
 			title: "Agent 运行看板",
 			description:
-				"按状态追踪本地 Agent 任务，查看正在执行、已完成和异常中断的工作。",
+				"按状态追踪本地 Agent 任务，查看正在执行、等待回答、已完成和异常中断的工作。",
 			empty: "此状态下暂无任务。",
 			status: {
 				running: "Running",
+				waiting: "等待用户",
 				finish: "Finish",
 				error: "Error",
 			},
 			statusDescription: {
 				running: "正在执行",
+				waiting: "需要回答后继续",
 				finish: "已顺利完成",
 				error: "需要处理",
 			},
@@ -99,7 +101,7 @@ const zhCN = {
 				},
 				migrationPlan: {
 					title: "数据库迁移方案",
-					description: "连接在生成迁移步骤时意外中断。",
+					description: "需要确认目标数据库版本后继续生成迁移步骤。",
 				},
 				dependencyScan: {
 					title: "依赖安全扫描",

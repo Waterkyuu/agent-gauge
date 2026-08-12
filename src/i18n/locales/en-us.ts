@@ -69,15 +69,17 @@ const enUS = {
 		runBoard: {
 			title: "Agent run board",
 			description:
-				"Track local agent tasks by status, from work in progress to completed and interrupted runs.",
+				"Track local agent tasks that are running, awaiting input, completed, or interrupted.",
 			empty: "No tasks in this status.",
 			status: {
 				running: "Running",
+				waiting: "Awaiting user",
 				finish: "Finish",
 				error: "Error",
 			},
 			statusDescription: {
 				running: "In progress",
+				waiting: "Needs an answer to continue",
 				finish: "Completed successfully",
 				error: "Needs attention",
 			},
@@ -105,7 +107,7 @@ const enUS = {
 				migrationPlan: {
 					title: "Database migration plan",
 					description:
-						"The connection stopped while migration steps were generated.",
+						"The target database version is required before migration steps can continue.",
 				},
 				dependencyScan: {
 					title: "Dependency security scan",

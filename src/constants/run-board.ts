@@ -1,6 +1,6 @@
 import type { AgentKind } from "@/types/agent";
 
-type RunBoardStatus = "running" | "finish" | "error";
+type RunBoardStatus = "running" | "waiting" | "finish" | "error";
 
 type RunBoardItem = {
 	/** Stable identifier for the mocked run. */
@@ -63,7 +63,7 @@ const RUN_BOARD_ITEMS: RunBoardItem[] = [
 		agent: "claude",
 		time: "07:30",
 		duration: "04m 56s",
-		status: "error",
+		status: "waiting",
 	},
 	{
 		id: "run-1033",
