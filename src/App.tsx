@@ -6,6 +6,8 @@ import { checkAgentProcesses } from "./api/agent";
 import { checkClaudeLogin, runClaudeTask } from "./api/claude";
 import { checkCodexLogin, runCodexTask } from "./api/codex";
 import { checkWorkBuddyLogin, runWorkBuddyTask } from "./api/workbuddy";
+import { AgentComparisonCard } from "./components/agent-comparison-card";
+import { AgentSelectionCard } from "./components/agent-selection-card";
 import type {
 	AgentKind,
 	AgentProcessStates,
@@ -26,51 +28,129 @@ type ProcessState =
 	| { status: "resolved"; value: AgentProcessStates }
 	| { status: "failed" };
 
-const agentLoginChecks: Record<AgentKind, () => Promise<AgentRuntimeStatus>> = {
-	claude: checkClaudeLogin,
-	codex: checkCodexLogin,
-	workbuddy: checkWorkBuddyLogin,
+type AgentRunState =
+	| { status: "idle" }
+	| { status: "running" }
+	| {
+			/** Completed metrics and response from this product. */
+			status: "succeeded";
+			/** Measured result returned by the local Agent runtime. */
+			result: AgentRunResult;
+	  }
+	| {
+			/** Failed run that does not interrupt the other selected products. */
+			status: "failed";
+			/** Localized error presented inside this product's comparison card. */
+			errorMessage: string;
+	  };
+
+type AgentStatusDisplay = {
+	/** User-visible installation, login, and process state. */
+	message: string;
+	/** Tailwind color class for the status indicator. */
+	tone: string;
+	/** Whether this product can participate in a comparison run. */
+	isReady: boolean;
+};
+
+const AGENT_KINDS = ["codex", "claude", "workbuddy"] as const;
+
+const AGENT_LOGIN_CHECKS: Record<AgentKind, () => Promise<AgentRuntimeStatus>> =
+	{
+		claude: checkClaudeLogin,
+		codex: checkCodexLogin,
+		workbuddy: checkWorkBuddyLogin,
+	};
+
+const AGENT_TASK_RUNNERS: Record<
+	AgentKind,
+	(query: string) => Promise<AgentRunResult>
+> = {
+	claude: runClaudeTask,
+	codex: runCodexTask,
+	workbuddy: runWorkBuddyTask,
 };
 
 /**
- * Formats a measured latency without hiding sub-second precision.
+ * Resolves a product's selectable state from its live login and process probes.
  *
  * @example
- * formatDuration(2450); // "2.45 s"
+ * resolveAgentStatus("codex", { status: "checking" }, processState, t);
  */
-const formatDuration = (milliseconds: number) => {
-	if (milliseconds < 1000) {
-		return `${milliseconds} ms`;
+const resolveAgentStatus = (
+	agent: AgentKind,
+	loginState: LoginState,
+	processState: ProcessState,
+	t: TFunction,
+): AgentStatusDisplay => {
+	const agentName = t(`agentNames.${agent}`);
+	if (loginState.status === "checking") {
+		return {
+			message: t("checkingLogin", { agent: agentName }),
+			tone: "bg-amber-400",
+			isReady: false,
+		};
 	}
-	return `${(milliseconds / 1000).toFixed(2)} s`;
+	if (loginState.status === "failed") {
+		return {
+			message: t("loginCheckFailed", { agent: agentName }),
+			tone: "bg-rose-400",
+			isReady: false,
+		};
+	}
+	if (!loginState.value.installed) {
+		return {
+			message: t("notInstalled", { agent: agentName }),
+			tone: "bg-rose-400",
+			isReady: false,
+		};
+	}
+	if (!loginState.value.loggedIn) {
+		return {
+			message: t("notLoggedIn", { agent: agentName }),
+			tone: "bg-rose-400",
+			isReady: false,
+		};
+	}
+	if (processState.status === "checking") {
+		return {
+			message: t("checkingProcess", { agent: agentName }),
+			tone: "bg-amber-400",
+			isReady: true,
+		};
+	}
+	if (processState.status === "failed") {
+		return {
+			message: t("processCheckFailed", { agent: agentName }),
+			tone: "bg-rose-400",
+			isReady: true,
+		};
+	}
+	if (processState.value[agent]) {
+		return {
+			message: t("agentRunning", { agent: agentName }),
+			tone: "bg-emerald-400",
+			isReady: true,
+		};
+	}
+	return {
+		message: t("agentReady", { agent: agentName }),
+		tone: "bg-sky-400",
+		isReady: true,
+	};
 };
 
 /**
- * Localizes a known agent reasoning level while retaining its wire value.
- *
- * @example
- * formatReasoningEffort("high", t); // "高 (high)"
- */
-const formatReasoningEffort = (effort: string | null, t: TFunction) => {
-	if (!effort) {
-		return t("metricUnavailable");
-	}
-
-	const localized = t(`reasoningEffortLevels.${effort}`, {
-		defaultValue: effort,
-	});
-	return localized ? `${localized} (${effort})` : effort;
-};
-
-/**
- * Renders the local agent selector, query composer, and completed task metrics.
+ * Renders multi-product selection, one shared task, and comparable run metrics.
  *
  * @example
  * <App />
  */
 const App = () => {
 	const { t, i18n } = useTranslation();
-	const [selectedAgent, setSelectedAgent] = useState<AgentKind>("codex");
+	const [selectedAgents, setSelectedAgents] = useState<AgentKind[]>([
+		...AGENT_KINDS,
+	]);
 	const [loginStates, setLoginStates] = useState<LoginStates>({
 		claude: { status: "checking" },
 		codex: { status: "checking" },
@@ -80,9 +160,14 @@ const App = () => {
 	const [processState, setProcessState] = useState<ProcessState>({
 		status: "checking",
 	});
-	const [isRunning, setIsRunning] = useState(false);
-	const [result, setResult] = useState<AgentRunResult | null>(null);
-	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [runStates, setRunStates] = useState<Record<AgentKind, AgentRunState>>({
+		claude: { status: "idle" },
+		codex: { status: "idle" },
+		workbuddy: { status: "idle" },
+	});
+	const isRunning = Object.values(runStates).some(
+		(state) => state.status === "running",
+	);
 
 	useEffect(() => {
 		if (isRunning) {
@@ -94,13 +179,13 @@ const App = () => {
 
 		/** Refreshes every login state independently without overlapping probes. */
 		const refreshLoginStates = () => {
-			for (const agent of Object.keys(agentLoginChecks) as AgentKind[]) {
+			for (const agent of AGENT_KINDS) {
 				if (pendingAgents.has(agent)) {
 					continue;
 				}
 
 				pendingAgents.add(agent);
-				agentLoginChecks[agent]()
+				AGENT_LOGIN_CHECKS[agent]()
 					.then((value) => {
 						if (isActive) {
 							setLoginStates((current) => ({
@@ -167,184 +252,169 @@ const App = () => {
 		};
 	}, []);
 
-	const loginState = loginStates[selectedAgent];
-	const agentName = t(`agentNames.${selectedAgent}`);
-	const runtimeStatus =
-		loginState.status === "resolved" ? loginState.value : null;
-	const isReady = runtimeStatus?.installed === true && runtimeStatus.loggedIn;
-	const isProcessRunning =
-		processState.status === "resolved"
-			? processState.value[selectedAgent]
-			: null;
+	const agentDisplays = AGENT_KINDS.reduce<
+		Record<AgentKind, AgentStatusDisplay>
+	>(
+		(displays, agent) => {
+			displays[agent] = resolveAgentStatus(
+				agent,
+				loginStates[agent],
+				processState,
+				t,
+			);
+			return displays;
+		},
+		{} as Record<AgentKind, AgentStatusDisplay>,
+	);
+	const runnableAgents = AGENT_KINDS.filter(
+		(agent) => selectedAgents.includes(agent) && agentDisplays[agent].isReady,
+	);
+	const comparisonAgents = AGENT_KINDS.filter(
+		(agent) => runStates[agent].status !== "idle",
+	);
 	const numberLocale = i18n.resolvedLanguage ?? "en-US";
 
-	/**
-	 * Changes and persists the active UI language through i18next.
-	 *
-	 * @example
-	 * changeLanguage("zh-CN");
-	 */
+	/** Changes and persists the active UI language through i18next. */
 	const changeLanguage = async (language: "en-US" | "zh-CN") => {
 		await i18n.changeLanguage(language);
 	};
 
 	/**
-	 * Switches the active local agent and clears metrics from the prior product.
+	 * Includes or excludes one ready product from the next comparison run.
 	 *
 	 * @example
-	 * selectAgent("workbuddy");
+	 * toggleAgent("workbuddy");
 	 */
-	const selectAgent = (agent: AgentKind) => {
-		if (isRunning) {
+	const toggleAgent = (agent: AgentKind) => {
+		if (isRunning || !agentDisplays[agent].isReady) {
 			return;
 		}
-		setSelectedAgent(agent);
-		setResult(null);
-		setErrorMessage(null);
+		setSelectedAgents((current) =>
+			current.includes(agent)
+				? current.filter((candidate) => candidate !== agent)
+				: [...current, agent],
+		);
+		setRunStates({
+			claude: { status: "idle" },
+			codex: { status: "idle" },
+			workbuddy: { status: "idle" },
+		});
 	};
 
 	/**
-	 * Submits the current query once and replaces the prior result.
+	 * Sends one query to every selected product concurrently and records each result independently.
 	 *
 	 * @example
 	 * onSubmit(event);
 	 */
 	const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
-		if (!isReady || isRunning || query.trim().length === 0) {
+		const normalizedQuery = query.trim();
+		if (
+			isRunning ||
+			normalizedQuery.length === 0 ||
+			runnableAgents.length === 0
+		) {
 			return;
 		}
 
-		setIsRunning(true);
-		setErrorMessage(null);
-		setResult(null);
-		try {
-			if (selectedAgent === "claude") {
-				setResult(await runClaudeTask(query.trim()));
-			} else if (selectedAgent === "codex") {
-				setResult(await runCodexTask(query.trim()));
-			} else {
-				setResult(await runWorkBuddyTask(query.trim()));
-			}
-		} catch (error) {
-			setErrorMessage(getErrorMessage(error, t("requestFailed")));
-		} finally {
-			setIsRunning(false);
-		}
-	};
+		const activeAgents = [...runnableAgents];
+		setRunStates({
+			claude: activeAgents.includes("claude")
+				? { status: "running" }
+				: { status: "idle" },
+			codex: activeAgents.includes("codex")
+				? { status: "running" }
+				: { status: "idle" },
+			workbuddy: activeAgents.includes("workbuddy")
+				? { status: "running" }
+				: { status: "idle" },
+		});
 
-	let loginMessage: string = t("checkingLogin", { agent: agentName });
-	let loginTone: string = "bg-amber-400";
-	if (loginState.status === "failed") {
-		loginMessage = t("loginCheckFailed", { agent: agentName });
-		loginTone = "bg-rose-400";
-	} else if (loginState.status === "resolved") {
-		if (!loginState.value.installed) {
-			loginMessage = t("notInstalled", { agent: agentName });
-			loginTone = "bg-rose-400";
-		} else if (!loginState.value.loggedIn) {
-			loginMessage = t("notLoggedIn", { agent: agentName });
-			loginTone = "bg-rose-400";
-		} else {
-			if (processState.status === "checking") {
-				loginMessage = t("checkingProcess", { agent: agentName });
-			} else if (processState.status === "failed") {
-				loginMessage = t("processCheckFailed", { agent: agentName });
-				loginTone = "bg-rose-400";
-			} else if (isProcessRunning) {
-				loginMessage = t("agentRunning", { agent: agentName });
-				loginTone = "bg-emerald-400";
-			} else {
-				loginMessage = t("agentReady", { agent: agentName });
-				loginTone = "bg-sky-400";
-			}
-		}
-	}
+		await Promise.all(
+			activeAgents.map(async (agent) => {
+				try {
+					const result = await AGENT_TASK_RUNNERS[agent](normalizedQuery);
+					setRunStates((current) => ({
+						...current,
+						[agent]: { status: "succeeded", result },
+					}));
+				} catch (error) {
+					setRunStates((current) => ({
+						...current,
+						[agent]: {
+							status: "failed",
+							errorMessage: getErrorMessage(error, t("requestFailed")),
+						},
+					}));
+				}
+			}),
+		);
+	};
 
 	return (
 		<main className="min-h-screen bg-slate-950 px-5 py-10 text-white sm:px-8">
-			<section className="mx-auto max-w-4xl">
+			<section className="mx-auto max-w-7xl">
 				<header className="mb-8">
-					<div className="mb-5 flex items-center justify-between gap-4">
+					<div className="mb-8 flex items-center justify-between gap-4">
 						<p className="font-semibold tracking-tight">{t("appName")}</p>
-						<div className="flex items-center gap-3">
-							<fieldset
-								aria-label={t("languageSelection")}
-								className="inline-flex gap-1 rounded-lg border border-white/10 bg-white/5 p-1"
-							>
-								{(["zh-CN", "en-US"] as const).map((language) => (
-									<button
-										aria-pressed={i18n.resolvedLanguage === language}
-										className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:text-white aria-pressed:bg-white/10 aria-pressed:text-white"
-										key={language}
-										onClick={() => changeLanguage(language)}
-										type="button"
-									>
-										{t(
-											language === "zh-CN"
-												? "languages.zhCN"
-												: "languages.enUS",
-										)}
-									</button>
-								))}
-							</fieldset>
-							<div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
-								<span className={`size-2 rounded-full ${loginTone}`} />
-								{loginMessage}
-							</div>
-						</div>
+						<fieldset
+							aria-label={t("languageSelection")}
+							className="inline-flex gap-1 rounded-lg border border-white/10 bg-white/5 p-1"
+						>
+							{(["zh-CN", "en-US"] as const).map((language) => (
+								<button
+									aria-pressed={i18n.resolvedLanguage === language}
+									className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:text-white aria-pressed:bg-white/10 aria-pressed:text-white"
+									key={language}
+									onClick={() => changeLanguage(language)}
+									type="button"
+								>
+									{t(
+										language === "zh-CN" ? "languages.zhCN" : "languages.enUS",
+									)}
+								</button>
+							))}
+						</fieldset>
 					</div>
-					<fieldset
-						aria-label={t("agentSelection")}
-						className="mb-6 inline-flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1"
-					>
-						{(["codex", "claude", "workbuddy"] as const).map((agent) => (
-							<button
-								aria-pressed={selectedAgent === agent}
-								className="rounded-lg px-4 py-2 text-sm text-slate-400 transition hover:text-white aria-pressed:bg-indigo-500 aria-pressed:text-white"
-								disabled={isRunning}
-								key={agent}
-								onClick={() => selectAgent(agent)}
-								type="button"
-							>
-								{t(`agentNames.${agent}`)}
-							</button>
-						))}
-					</fieldset>
 					<p className="mb-2 text-sm font-medium text-indigo-300">
 						{t("tagline")}
 					</p>
-					<h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
+					<h1 className="max-w-4xl text-4xl font-semibold tracking-tight sm:text-5xl">
 						{t("title")}
 					</h1>
-					<p className="mt-4 max-w-2xl leading-7 text-slate-400">
+					<p className="mt-4 max-w-3xl leading-7 text-slate-400">
 						{t("description")}
 					</p>
-					{isReady ? (
-						<dl
-							aria-label={t("runtimeConfiguration", { agent: agentName })}
-							className="mt-5 grid gap-3 sm:grid-cols-2"
-						>
-							<div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-								<dt className="text-xs text-slate-500">{t("currentModel")}</dt>
-								<dd className="mt-1 font-medium text-slate-100">
-									{runtimeStatus?.model ?? t("metricUnavailable")}
-								</dd>
-							</div>
-							<div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-								<dt className="text-xs text-slate-500">
-									{t("reasoningEffort")}
-								</dt>
-								<dd className="mt-1 font-medium text-slate-100">
-									{formatReasoningEffort(
-										runtimeStatus?.reasoningEffort ?? null,
-										t,
-									)}
-								</dd>
-							</div>
-						</dl>
-					) : null}
 				</header>
+
+				<fieldset aria-label={t("agentSelection")} className="mb-6">
+					<legend className="mb-3 text-sm font-medium text-slate-300">
+						{t("agentSelection")}
+					</legend>
+					<div className="grid gap-3 md:grid-cols-3">
+						{AGENT_KINDS.map((agent) => {
+							const loginState = loginStates[agent];
+							const runtimeStatus =
+								loginState.status === "resolved" ? loginState.value : null;
+							const isSelected =
+								selectedAgents.includes(agent) && agentDisplays[agent].isReady;
+
+							return (
+								<AgentSelectionCard
+									agent={agent}
+									isDisabled={isRunning || !agentDisplays[agent].isReady}
+									isSelected={isSelected}
+									key={agent}
+									onToggle={toggleAgent}
+									runtimeStatus={runtimeStatus}
+									statusMessage={agentDisplays[agent].message}
+									statusTone={agentDisplays[agent].tone}
+								/>
+							);
+						})}
+					</div>
+				</fieldset>
 
 				<form
 					className="rounded-2xl border border-white/10 bg-white/5 p-5"
@@ -358,84 +428,62 @@ const App = () => {
 					</label>
 					<textarea
 						className="min-h-32 w-full resize-y rounded-xl border border-white/10 bg-slate-950/80 p-4 text-sm leading-6 text-slate-100 outline-none transition focus:border-indigo-400"
-						disabled={!isReady || isRunning}
+						disabled={isRunning}
 						id="agent-query"
 						maxLength={16000}
 						onChange={(event) => setQuery(event.target.value)}
 						placeholder={t("queryPlaceholder")}
 						value={query}
 					/>
-					<div className="mt-4 flex items-center justify-end">
+					<div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+						<p className="text-xs text-slate-400">
+							{t("selectedAgents", { count: runnableAgents.length })}
+						</p>
 						<Button
-							isDisabled={!isReady || isRunning || query.trim().length === 0}
+							isDisabled={
+								isRunning ||
+								query.trim().length === 0 ||
+								runnableAgents.length === 0
+							}
 							type="submit"
 							variant="primary"
 						>
 							{isRunning
-								? t("running", { agent: agentName })
-								: t("send", { agent: agentName })}
+								? t("comparingAgents", { count: runnableAgents.length })
+								: t("compareAgents", { count: runnableAgents.length })}
 						</Button>
 					</div>
-					{errorMessage ? (
-						<p className="mt-4 text-sm text-rose-300" role="alert">
-							{errorMessage}
-						</p>
-					) : null}
 				</form>
 
-				{result ? (
-					<section className="mt-6" aria-labelledby="metrics-title">
+				{comparisonAgents.length > 0 ? (
+					<section className="mt-8" aria-labelledby="comparison-title">
 						<h2
-							className="mb-3 text-sm font-medium text-slate-300"
-							id="metrics-title"
+							className="mb-4 text-sm font-medium text-slate-300"
+							id="comparison-title"
 						>
-							{t("metricsTitle")}
+							{t("comparisonTitle")}
 						</h2>
-						<div className="grid gap-3 sm:grid-cols-3">
-							{[
-								[
-									t("firstToken"),
-									result.timeToFirstTokenMs === null
-										? t("metricUnavailable")
-										: formatDuration(result.timeToFirstTokenMs),
-								],
-								[t("totalDuration"), formatDuration(result.totalDurationMs)],
-								[
-									t("totalTokens"),
-									result.tokenUsage?.totalTokens.toLocaleString(numberLocale) ??
-										t("metricUnavailable"),
-								],
-							].map(([label, value]) => (
-								<div
-									className="rounded-xl border border-white/10 bg-white/5 p-4"
-									key={label}
-								>
-									<p className="text-xs text-slate-500">{label}</p>
-									<p className="mt-2 text-2xl font-semibold tabular-nums">
-										{value}
-									</p>
-								</div>
-							))}
-						</div>
-						{result.tokenUsage ? (
-							<p className="mt-3 text-xs text-slate-500">
-								{t("inputTokens")}{" "}
-								{result.tokenUsage.inputTokens.toLocaleString(numberLocale)} ·{" "}
-								{t("outputTokens")}{" "}
-								{result.tokenUsage.outputTokens.toLocaleString(numberLocale)} ·{" "}
-								{t("reasoningTokens")}{" "}
-								{result.tokenUsage.reasoningOutputTokens?.toLocaleString(
-									numberLocale,
-								) ?? t("metricUnavailable")}
-							</p>
-						) : null}
-						<div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-5">
-							<h2 className="mb-3 text-sm font-medium text-slate-300">
-								{t("responseTitle", { agent: agentName })}
-							</h2>
-							<pre className="m-0 whitespace-pre-wrap font-sans text-sm leading-7 text-slate-200">
-								{result.response}
-							</pre>
+						<div className="grid items-start gap-4 lg:grid-cols-3">
+							{comparisonAgents.map((agent) => {
+								const runState = runStates[agent];
+
+								return (
+									<AgentComparisonCard
+										agent={agent}
+										errorMessage={
+											runState.status === "failed"
+												? runState.errorMessage
+												: null
+										}
+										isRunning={runState.status === "running"}
+										key={agent}
+										numberLocale={numberLocale}
+										result={
+											runState.status === "succeeded" ? runState.result : null
+										}
+									/>
+								);
+							})}
 						</div>
 					</section>
 				) : null}
