@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Profiler } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import "./i18n";
@@ -176,6 +177,91 @@ describe("App", () => {
 			await screen.findByText("Codex：运行中", {}, { timeout: 1500 }),
 		).toBeInTheDocument();
 		expect(processProbeCount).toBeGreaterThanOrEqual(2);
+	});
+
+	// Verifies that an unchanged process snapshot does not commit another render.
+	it("ignores unchanged process snapshots", async () => {
+		let processProbeCount = 0;
+		let renderCommitCount = 0;
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				processProbeCount += 1;
+				return Promise.resolve({
+					claude: false,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			return Promise.resolve({
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "ChatGPT",
+				model: "gpt-5.6-sol",
+				reasoningEffort: "high",
+			});
+		});
+
+		render(
+			<Profiler id="comparison" onRender={() => renderCommitCount++}>
+				<App />
+			</Profiler>,
+		);
+		expect(
+			await screen.findByText("Codex：已就绪，未运行"),
+		).toBeInTheDocument();
+		await waitFor(() => expect(processProbeCount).toBeGreaterThanOrEqual(1));
+		await new Promise((resolve) => window.setTimeout(resolve, 50));
+		const settledRenderCommitCount = renderCommitCount;
+
+		await waitFor(() => expect(processProbeCount).toBeGreaterThanOrEqual(2), {
+			timeout: 1500,
+		});
+
+		expect(renderCommitCount).toBe(settledRenderCommitCount);
+	});
+
+	// Verifies that unchanged authentication results keep the current UI state object.
+	it("ignores unchanged authentication snapshots", async () => {
+		let loginProbeCount = 0;
+		let processProbeCount = 0;
+		let renderCommitCount = 0;
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				processProbeCount += 1;
+				return Promise.resolve({
+					claude: false,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			loginProbeCount += 1;
+			return Promise.resolve({
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "ChatGPT",
+				model: "gpt-5.6-sol",
+				reasoningEffort: "high",
+			});
+		});
+
+		render(
+			<Profiler id="comparison" onRender={() => renderCommitCount++}>
+				<App />
+			</Profiler>,
+		);
+		expect(
+			await screen.findByText("Codex：已就绪，未运行"),
+		).toBeInTheDocument();
+		await waitFor(() => expect(loginProbeCount).toBeGreaterThanOrEqual(3));
+		await waitFor(() => expect(processProbeCount).toBeGreaterThanOrEqual(1));
+		await new Promise((resolve) => window.setTimeout(resolve, 50));
+		const settledRenderCommitCount = renderCommitCount;
+
+		window.dispatchEvent(new Event("focus"));
+		await waitFor(() => expect(loginProbeCount).toBeGreaterThanOrEqual(6));
+		await waitFor(() => expect(processProbeCount).toBeGreaterThanOrEqual(2));
+
+		expect(renderCommitCount).toBe(settledRenderCommitCount);
 	});
 
 	// Verifies that authentication changes refresh while the UI remains open.

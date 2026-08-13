@@ -73,6 +73,36 @@ const AGENT_TASK_RUNNERS: Record<
 };
 
 /**
+ * Compares the user-visible authentication and runtime configuration fields.
+ *
+ * @example
+ * areRuntimeStatusesEqual(previousStatus, nextStatus);
+ */
+const areRuntimeStatusesEqual = (
+	left: AgentRuntimeStatus,
+	right: AgentRuntimeStatus,
+) =>
+	left.installed === right.installed &&
+	left.loggedIn === right.loggedIn &&
+	left.authenticationMethod === right.authenticationMethod &&
+	left.model === right.model &&
+	left.reasoningEffort === right.reasoningEffort;
+
+/**
+ * Compares one complete running-process snapshot.
+ *
+ * @example
+ * areProcessStatesEqual(previousProcesses, nextProcesses);
+ */
+const areProcessStatesEqual = (
+	left: AgentProcessStates,
+	right: AgentProcessStates,
+) =>
+	left.claude === right.claude &&
+	left.codex === right.codex &&
+	left.workbuddy === right.workbuddy;
+
+/**
  * Resolves a product's selectable state from its live login and process probes.
  *
  * @example
@@ -166,6 +196,8 @@ const ComparisonPage = () => {
 		codex: { status: "idle" },
 		workbuddy: { status: "idle" },
 	});
+	const loginStatesRef = useRef(loginStates);
+	const processStateRef = useRef(processState);
 	const activeLoginProbeCountRef = useRef(0);
 	const refreshProcessesAfterLoginRef = useRef<() => void>(() => {});
 	const isRunning = Object.values(runStates).some(
@@ -192,18 +224,29 @@ const ComparisonPage = () => {
 				AGENT_LOGIN_CHECKS[agent]()
 					.then((value) => {
 						if (isActive) {
-							setLoginStates((current) => ({
-								...current,
+							const previous = loginStatesRef.current[agent];
+							if (
+								previous.status === "resolved" &&
+								areRuntimeStatusesEqual(previous.value, value)
+							) {
+								return;
+							}
+							const next: LoginStates = {
+								...loginStatesRef.current,
 								[agent]: { status: "resolved", value },
-							}));
+							};
+							loginStatesRef.current = next;
+							setLoginStates(next);
 						}
 					})
 					.catch(() => {
-						if (isActive) {
-							setLoginStates((current) => ({
-								...current,
+						if (isActive && loginStatesRef.current[agent].status !== "failed") {
+							const next: LoginStates = {
+								...loginStatesRef.current,
 								[agent]: { status: "failed" },
-							}));
+							};
+							loginStatesRef.current = next;
+							setLoginStates(next);
 						}
 					})
 					.finally(() => {
@@ -240,13 +283,22 @@ const ComparisonPage = () => {
 			try {
 				const value = await checkAgentProcesses();
 				if (isActive) {
-					setProcessState({ status: "resolved", value });
+					const previous = processStateRef.current;
+					if (
+						previous.status === "resolved" &&
+						areProcessStatesEqual(previous.value, value)
+					) {
+						return;
+					}
+					const next: ProcessState = { status: "resolved", value };
+					processStateRef.current = next;
+					setProcessState(next);
 				}
 			} catch {
-				if (isActive) {
-					setProcessState((current) =>
-						current.status === "checking" ? { status: "failed" } : current,
-					);
+				if (isActive && processStateRef.current.status === "checking") {
+					const next: ProcessState = { status: "failed" };
+					processStateRef.current = next;
+					setProcessState(next);
 				}
 			} finally {
 				isChecking = false;
