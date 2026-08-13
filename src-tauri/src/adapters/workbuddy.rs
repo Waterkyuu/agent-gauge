@@ -118,7 +118,16 @@ struct AcpResult {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpModels {
+    #[serde(default)]
+    available_models: Vec<AcpModel>,
     current_model_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpModel {
+    model_id: String,
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -400,6 +409,13 @@ fn authentication_from_acp_response(
 
     let result = response.result.ok_or(AppError::WorkBuddyProbeFailed)?;
     let logged_in = result.session_id.is_some();
+    let model = result.models.map(|models| {
+        models
+            .available_models
+            .into_iter()
+            .find(|model| model.model_id == models.current_model_id)
+            .map_or(models.current_model_id, |model| model.name)
+    });
     let reasoning_effort = result.config_options.and_then(|options| {
         options
             .into_iter()
@@ -411,7 +427,7 @@ fn authentication_from_acp_response(
         installed: true,
         logged_in,
         authentication_method: logged_in.then(|| "WorkBuddy account".to_string()),
-        model: result.models.map(|models| models.current_model_id),
+        model,
         reasoning_effort,
     })
 }
@@ -509,9 +525,9 @@ mod tests {
     }
 
     #[test]
-    fn reads_model_and_thought_level_from_the_acp_session() {
+    fn reads_model_name_and_thought_level_from_the_acp_session() {
         let response: AcpMessage = serde_json::from_str(
-            r#"{"id":1,"result":{"sessionId":"session-1","models":{"currentModelId":"fast-model"},"configOptions":[{"id":"thought_level","currentValue":"enabled"}]}}"#,
+            r#"{"id":1,"result":{"sessionId":"session-1","models":{"availableModels":[{"modelId":"fast-model","name":"Fast"},{"modelId":"kimi-k3","name":"Kimi-K3"}],"currentModelId":"kimi-k3"},"configOptions":[{"id":"thought_level","currentValue":"enabled"}]}}"#,
         )
         .expect("fixture should deserialize");
 
@@ -520,7 +536,7 @@ mod tests {
 
         assert!(authentication.installed);
         assert!(authentication.logged_in);
-        assert_eq!(authentication.model.as_deref(), Some("fast-model"));
+        assert_eq!(authentication.model.as_deref(), Some("Kimi-K3"));
         assert_eq!(authentication.reasoning_effort.as_deref(), Some("enabled"));
     }
 
