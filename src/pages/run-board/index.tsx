@@ -15,7 +15,7 @@ import { RUN_BOARD_ITEMS, type RunBoardStatus } from "@/constants/run-board";
 type StatusPresentation = {
 	/** Icon rendered beside the status name. */
 	icon: ComponentType<SVGProps<SVGSVGElement>>;
-	/** Tailwind classes for the status icon container. */
+	/** Tailwind color class for the status icon. */
 	iconClassName: string;
 };
 
@@ -29,19 +29,19 @@ const BOARD_STATUSES: RunBoardStatus[] = [
 const STATUS_PRESENTATIONS: Record<RunBoardStatus, StatusPresentation> = {
 	running: {
 		icon: Play,
-		iconClassName: "bg-zinc-900 text-zinc-50",
+		iconClassName: "text-blue-600",
 	},
 	waiting: {
 		icon: CircleQuestion,
-		iconClassName: "bg-zinc-800 text-zinc-50",
+		iconClassName: "text-amber-500",
 	},
 	finish: {
 		icon: CircleCheck,
-		iconClassName: "bg-zinc-200 text-zinc-700",
+		iconClassName: "text-emerald-600",
 	},
 	error: {
 		icon: TriangleExclamation,
-		iconClassName: "bg-zinc-200 text-zinc-600",
+		iconClassName: "text-rose-600",
 	},
 };
 
@@ -60,7 +60,7 @@ const RunBoardPage = () => {
 				</p>
 			</header>
 
-			<div className="grid overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] lg:grid-cols-2 xl:grid-cols-4">
+			<div className="grid overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] lg:grid-cols-2 xl:min-h-[40rem] xl:grid-cols-4">
 				{BOARD_STATUSES.map((status) => {
 					const presentation = STATUS_PRESENTATIONS[status];
 					const StatusIcon = presentation.icon;
@@ -71,19 +71,18 @@ const RunBoardPage = () => {
 					return (
 						<section
 							aria-labelledby={`board-${status}`}
-							className="min-w-0 border-b border-[var(--app-line)] lg:border-r lg:[&:nth-child(2n)]:border-r-0 lg:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-child(2n)]:border-r xl:[&:nth-child(4n)]:border-r-0 xl:[&:nth-last-child(-n+4)]:border-b-0"
+							className="flex min-w-0 flex-col border-b border-[var(--app-line)] lg:border-r lg:[&:nth-child(2n)]:border-r-0 lg:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-child(2n)]:border-r xl:[&:nth-child(4n)]:border-r-0 xl:[&:nth-last-child(-n+4)]:border-b-0"
 							key={status}
 						>
-							<header className="flex items-center justify-between gap-4 border-b border-[var(--app-line)] px-4 py-3.5">
+							<header className="flex items-center border-b border-[var(--app-line)] px-4 py-3.5">
 								<div className="flex min-w-0 items-center gap-3">
-									<span
+									<StatusIcon
+										aria-hidden="true"
 										className={cn(
-											"grid size-8 shrink-0 place-items-center rounded-lg",
+											"size-5 shrink-0",
 											presentation.iconClassName,
 										)}
-									>
-										<StatusIcon aria-hidden="true" className="size-4" />
-									</span>
+									/>
 									<div className="min-w-0">
 										<h2
 											className="text-sm font-semibold"
@@ -96,12 +95,9 @@ const RunBoardPage = () => {
 										</p>
 									</div>
 								</div>
-								<span className="font-mono text-xs text-[var(--app-muted)] tabular-nums">
-									{items.length.toString().padStart(2, "0")}
-								</span>
 							</header>
 
-							<div className="min-h-48 space-y-3 bg-[color:var(--app-canvas)]/45 p-3">
+							<div className="min-h-48 flex-1 space-y-3 bg-[color:var(--app-canvas)]/45 p-3">
 								{items.length > 0 ? (
 									items.map((item) => (
 										<Card

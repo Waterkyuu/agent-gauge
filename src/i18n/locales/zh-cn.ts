@@ -71,10 +71,10 @@ const zhCN = {
 				"按状态追踪本地 Agent 任务，查看正在执行、等待回答、已完成和异常中断的工作。",
 			empty: "此状态下暂无任务。",
 			status: {
-				running: "Running",
+				running: "运行中",
 				waiting: "等待用户",
-				finish: "Finish",
-				error: "Error",
+				finish: "已完成",
+				error: "异常",
 			},
 			statusDescription: {
 				running: "正在执行",
