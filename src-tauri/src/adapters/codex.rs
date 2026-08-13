@@ -6,6 +6,10 @@ use std::ffi::{OsStr, OsString};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc, Mutex, MutexGuard,
+};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -13,6 +17,7 @@ const APP_SERVER_START_TIMEOUT: Duration = Duration::from_secs(30);
 const CODEX_RUN_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const MAX_EVENT_BYTES: u64 = 1024 * 1024;
 const EVENT_QUEUE_CAPACITY: usize = 64;
+const MAX_RUNTIME_DEFAULT_RESOLUTION_ATTEMPTS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexAuthentication {
@@ -27,8 +32,18 @@ pub(crate) trait CodexAdapter {
     fn check_authentication(&self) -> Result<CodexAuthentication, AppError>;
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct SystemCodexAdapter;
+#[derive(Debug, Clone)]
+pub(crate) struct SystemCodexAdapter {
+    runtime_defaults_cache: CodexRuntimeDefaultsCache,
+}
+
+impl SystemCodexAdapter {
+    pub(crate) fn new(runtime_defaults_cache: CodexRuntimeDefaultsCache) -> Self {
+        Self {
+            runtime_defaults_cache,
+        }
+    }
+}
 
 impl CodexAdapter for SystemCodexAdapter {
     /// Detects a local Codex executable and asks the CLI whether it has active credentials.
@@ -62,9 +77,15 @@ impl CodexAdapter for SystemCodexAdapter {
                     });
                     // The login status command does not report the effective model. A short-lived
                     // ephemeral App Server thread resolves the same defaults a new task will use.
-                    let runtime_defaults = logged_in
-                        .then(|| resolve_codex_runtime_defaults(&executable))
-                        .transpose()?;
+                    let runtime_defaults = if logged_in {
+                        Some(
+                            self.runtime_defaults_cache
+                                .resolve(|| resolve_codex_runtime_defaults(&executable))?,
+                        )
+                    } else {
+                        self.runtime_defaults_cache.invalidate();
+                        None
+                    };
 
                     return Ok(CodexAuthentication {
                         installed: true,
@@ -82,6 +103,7 @@ impl CodexAdapter for SystemCodexAdapter {
             }
         }
 
+        self.runtime_defaults_cache.invalidate();
         Ok(CodexAuthentication {
             installed: false,
             logged_in: false,
@@ -135,6 +157,85 @@ struct CodexRuntimeDefaults {
     thread_id: String,
     model: String,
     reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedCodexRuntimeDefaults {
+    revision: u64,
+    value: CodexRuntimeDefaults,
+}
+
+#[derive(Debug, Default)]
+struct CodexRuntimeDefaultsCacheState {
+    enabled: AtomicBool,
+    revision: AtomicU64,
+    value: Mutex<Option<CachedCodexRuntimeDefaults>>,
+}
+
+/// Shares the latest effective model defaults across authentication probes.
+///
+/// The cache is enabled only after the native configuration watcher starts successfully. When
+/// watching is unavailable, every probe resolves fresh defaults so the UI cannot become stale.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CodexRuntimeDefaultsCache {
+    state: Arc<CodexRuntimeDefaultsCacheState>,
+}
+
+impl CodexRuntimeDefaultsCache {
+    pub(crate) fn enable(&self) {
+        self.state.enabled.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn disable(&self) {
+        self.state.enabled.store(false, Ordering::Release);
+        self.invalidate();
+    }
+
+    pub(crate) fn invalidate(&self) {
+        self.state.revision.fetch_add(1, Ordering::AcqRel);
+        *self.lock_value() = None;
+    }
+
+    fn resolve(
+        &self,
+        mut resolver: impl FnMut() -> Result<CodexRuntimeDefaults, AppError>,
+    ) -> Result<CodexRuntimeDefaults, AppError> {
+        if !self.state.enabled.load(Ordering::Acquire) {
+            return resolver();
+        }
+
+        for _ in 0..MAX_RUNTIME_DEFAULT_RESOLUTION_ATTEMPTS {
+            let revision = self.state.revision.load(Ordering::Acquire);
+            if let Some(cached) = self
+                .lock_value()
+                .as_ref()
+                .filter(|cached| cached.revision == revision)
+            {
+                return Ok(cached.value.clone());
+            }
+
+            let resolved = resolver()?;
+            let mut cached_value = self.lock_value();
+            if self.state.revision.load(Ordering::Acquire) == revision {
+                *cached_value = Some(CachedCodexRuntimeDefaults {
+                    revision,
+                    value: resolved.clone(),
+                });
+                return Ok(resolved);
+            }
+        }
+
+        // Rapid consecutive writes can invalidate both bounded attempts. Return a fresh value
+        // without caching it; the next scheduled probe can establish a stable cached snapshot.
+        resolver()
+    }
+
+    fn lock_value(&self) -> MutexGuard<'_, Option<CachedCodexRuntimeDefaults>> {
+        match self.state.value.lock() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -441,7 +542,10 @@ fn codex_executable_candidates() -> Vec<OsString> {
 
 #[cfg(test)]
 mod tests {
-    use super::{codex_executable_candidates, collect_run_events};
+    use super::{
+        codex_executable_candidates, collect_run_events, CodexRuntimeDefaults,
+        CodexRuntimeDefaultsCache,
+    };
     use crate::error::AppError;
     use std::sync::mpsc;
     use std::time::Instant;
@@ -475,5 +579,61 @@ mod tests {
 
             assert_eq!(result, Err(AppError::CodexNeedsInput));
         }
+    }
+
+    #[test]
+    fn caches_runtime_defaults_until_the_configuration_is_invalidated() {
+        let cache = CodexRuntimeDefaultsCache::default();
+        cache.enable();
+        let mut resolution_count = 0;
+        let mut resolve = || {
+            resolution_count += 1;
+            Ok(CodexRuntimeDefaults {
+                thread_id: format!("thread-{resolution_count}"),
+                model: format!("model-{resolution_count}"),
+                reasoning_effort: Some("high".to_string()),
+            })
+        };
+
+        let first = cache
+            .resolve(&mut resolve)
+            .expect("initial runtime defaults should resolve");
+        let cached = cache
+            .resolve(&mut resolve)
+            .expect("runtime defaults should come from the cache");
+        cache.invalidate();
+        let refreshed = cache
+            .resolve(&mut resolve)
+            .expect("invalidated runtime defaults should resolve again");
+
+        assert_eq!(first.model, "model-1");
+        assert_eq!(cached.model, "model-1");
+        assert_eq!(refreshed.model, "model-2");
+        assert_eq!(resolution_count, 2);
+    }
+
+    #[test]
+    fn bypasses_the_cache_when_configuration_monitoring_is_unavailable() {
+        let cache = CodexRuntimeDefaultsCache::default();
+        let mut resolution_count = 0;
+        let mut resolve = || {
+            resolution_count += 1;
+            Ok(CodexRuntimeDefaults {
+                thread_id: format!("thread-{resolution_count}"),
+                model: format!("model-{resolution_count}"),
+                reasoning_effort: None,
+            })
+        };
+
+        let first = cache
+            .resolve(&mut resolve)
+            .expect("initial runtime defaults should resolve");
+        let second = cache
+            .resolve(&mut resolve)
+            .expect("uncached runtime defaults should resolve again");
+
+        assert_eq!(first.model, "model-1");
+        assert_eq!(second.model, "model-2");
+        assert_eq!(resolution_count, 2);
     }
 }
