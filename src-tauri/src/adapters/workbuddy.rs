@@ -1,9 +1,12 @@
 use crate::adapters::agent::AgentAdapter;
 use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
+use leveldb_forensic::{decode_local_storage, LocalStorageRecord};
 use serde::Deserialize;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::thread;
@@ -13,6 +16,121 @@ const WORKBUDDY_RUN_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const WORKBUDDY_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_EVENT_BYTES: u64 = 1024 * 1024;
 const EVENT_QUEUE_CAPACITY: usize = 64;
+const WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX: &str = "cb-newtask:model";
+const MAX_WORKBUDDY_LOCAL_STORAGE_BYTES: u64 = 16 * 1024 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkBuddyGlobalSelection {
+    id: String,
+    is_thinking: bool,
+    reasoning_effort: Option<String>,
+}
+
+impl WorkBuddyGlobalSelection {
+    fn thought_level(&self) -> &str {
+        if !self.is_thinking {
+            return "disabled";
+        }
+
+        self.reasoning_effort.as_deref().unwrap_or("enabled")
+    }
+}
+
+fn global_selection_from_local_storage(
+    records: &[LocalStorageRecord],
+) -> Option<WorkBuddyGlobalSelection> {
+    let (_, value) = records
+        .iter()
+        .filter_map(|record| match record {
+            LocalStorageRecord::Data {
+                origin,
+                script_key,
+                value,
+                seq,
+                deleted,
+            } if !deleted
+                && origin == "file://"
+                && !script_key.lossy
+                && !value.lossy
+                && (script_key.text == WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX
+                    || script_key
+                        .text
+                        .strip_prefix(WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX)
+                        .is_some_and(|suffix| suffix.starts_with(':'))) =>
+            {
+                Some((*seq, value.text.as_str()))
+            }
+            _ => None,
+        })
+        .max_by_key(|(seq, _)| *seq)?;
+
+    serde_json::from_str(value).ok()
+}
+
+fn workbuddy_local_storage_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| {
+        home.join(".workbuddy-ai")
+            .join("app")
+            .join("session")
+            .join("Local Storage")
+            .join("leveldb")
+    })
+}
+
+fn is_bounded_workbuddy_local_storage(path: &Path) -> bool {
+    if !fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir()) {
+        return false;
+    }
+    let Ok(entries) = fs::read_dir(path) else {
+        return false;
+    };
+    let mut total_bytes = 0_u64;
+
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        let Ok(file_type) = entry.file_type() else {
+            return false;
+        };
+        if file_type.is_symlink() {
+            return false;
+        }
+        if !file_type.is_file()
+            || !entry
+                .path()
+                .extension()
+                .and_then(OsStr::to_str)
+                .is_some_and(|extension| {
+                    extension.eq_ignore_ascii_case("ldb")
+                        || extension.eq_ignore_ascii_case("sst")
+                        || extension.eq_ignore_ascii_case("log")
+                })
+        {
+            continue;
+        }
+        let Ok(metadata) = entry.metadata() else {
+            return false;
+        };
+        total_bytes = total_bytes.saturating_add(metadata.len());
+        if total_bytes > MAX_WORKBUDDY_LOCAL_STORAGE_BYTES {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn read_workbuddy_global_selection() -> Option<WorkBuddyGlobalSelection> {
+    let path = workbuddy_local_storage_path()?;
+    if !is_bounded_workbuddy_local_storage(&path) {
+        return None;
+    }
+    let records = decode_local_storage(&path).ok()?;
+
+    global_selection_from_local_storage(&records)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkBuddyAuthentication {
@@ -391,11 +509,13 @@ fn initialize_acp_session(
     write_acp_message(stdin, &session_request.to_string())?;
     let response = wait_for_acp_response(event_receiver, 1)?;
 
-    authentication_from_acp_response(response)
+    let global_selection = read_workbuddy_global_selection();
+    authentication_from_acp_response(response, global_selection.as_ref())
 }
 
 fn authentication_from_acp_response(
     response: AcpMessage,
+    global_selection: Option<&WorkBuddyGlobalSelection>,
 ) -> Result<WorkBuddyAuthentication, AppError> {
     if response.error.is_some() {
         return Ok(WorkBuddyAuthentication {
@@ -410,18 +530,25 @@ fn authentication_from_acp_response(
     let result = response.result.ok_or(AppError::WorkBuddyProbeFailed)?;
     let logged_in = result.session_id.is_some();
     let model = result.models.map(|models| {
+        let model_id = global_selection
+            .map(|selection| selection.id.as_str())
+            .unwrap_or(&models.current_model_id);
         models
             .available_models
             .into_iter()
-            .find(|model| model.model_id == models.current_model_id)
-            .map_or(models.current_model_id, |model| model.name)
+            .find(|model| model.model_id == model_id)
+            .map_or_else(|| model_id.to_string(), |model| model.name)
     });
-    let reasoning_effort = result.config_options.and_then(|options| {
-        options
-            .into_iter()
-            .find(|option| option.id == "thought_level")
-            .map(|option| option.current_value)
-    });
+    let reasoning_effort = global_selection
+        .map(|selection| selection.thought_level().to_string())
+        .or_else(|| {
+            result.config_options.and_then(|options| {
+                options
+                    .into_iter()
+                    .find(|option| option.id == "thought_level")
+                    .map(|option| option.current_value)
+            })
+        });
 
     Ok(WorkBuddyAuthentication {
         installed: true,
@@ -475,9 +602,11 @@ fn terminate_child(child: &mut Child) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        authentication_from_acp_response, collect_workbuddy_events, AcpMessage, StreamUsage,
+        authentication_from_acp_response, collect_workbuddy_events,
+        global_selection_from_local_storage, AcpMessage, StreamUsage,
     };
     use crate::domain::codex_run::TokenUsage;
+    use leveldb_forensic::{Encoding, LocalStorageRecord, StorageValue};
     use std::sync::mpsc;
     use std::time::Instant;
 
@@ -531,13 +660,97 @@ mod tests {
         )
         .expect("fixture should deserialize");
 
-        let authentication = authentication_from_acp_response(response)
+        let authentication = authentication_from_acp_response(response, None)
             .expect("valid session should produce authentication state");
 
         assert!(authentication.installed);
         assert!(authentication.logged_in);
         assert_eq!(authentication.model.as_deref(), Some("Kimi-K3"));
         assert_eq!(authentication.reasoning_effort.as_deref(), Some("enabled"));
+    }
+
+    #[test]
+    fn global_selection_overrides_new_acp_session_defaults() {
+        let response: AcpMessage = serde_json::from_str(
+            r#"{"id":1,"result":{"sessionId":"session-1","models":{"availableModels":[{"modelId":"fast-model","name":"Fast"},{"modelId":"kimi-k3","name":"Kimi-K3"}],"currentModelId":"fast-model"},"configOptions":[{"id":"thought_level","currentValue":"enabled"}]}}"#,
+        )
+        .expect("fixture should deserialize");
+        let global_selection = super::WorkBuddyGlobalSelection {
+            id: "kimi-k3".to_string(),
+            is_thinking: true,
+            reasoning_effort: None,
+        };
+
+        let authentication = authentication_from_acp_response(response, Some(&global_selection))
+            .expect("valid session should produce authentication state");
+
+        assert_eq!(authentication.model.as_deref(), Some("Kimi-K3"));
+        assert_eq!(authentication.reasoning_effort.as_deref(), Some("enabled"));
+    }
+
+    #[test]
+    fn reads_latest_global_model_with_default_reasoning() {
+        let records = vec![
+            LocalStorageRecord::Data {
+                origin: "file://".to_string(),
+                script_key: StorageValue {
+                    text: "cb-newtask:model:user-1".to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                value: StorageValue {
+                    text: r#"{"id":"fast-model","isThinking":true}"#.to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                seq: 4,
+                deleted: false,
+            },
+            LocalStorageRecord::Data {
+                origin: "file://".to_string(),
+                script_key: StorageValue {
+                    text: "cb-newtask:model:user-1".to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                value: StorageValue {
+                    text: r#"{"id":"kimi-k3","isThinking":true}"#.to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                seq: 9,
+                deleted: false,
+            },
+            LocalStorageRecord::Data {
+                origin: "file://".to_string(),
+                script_key: StorageValue {
+                    text: "cb-newtask:model:user-1".to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                value: StorageValue {
+                    text: String::new(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                seq: 10,
+                deleted: true,
+            },
+        ];
+
+        let selection = global_selection_from_local_storage(&records)
+            .expect("latest global selection should be parsed");
+
+        assert_eq!(selection.id, "kimi-k3");
+        assert!(selection.is_thinking);
+        assert_eq!(selection.reasoning_effort, None);
+        assert_eq!(selection.thought_level(), "enabled");
     }
 
     #[test]
