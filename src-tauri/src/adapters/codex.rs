@@ -46,7 +46,13 @@ impl CodexAdapter for SystemCodexAdapter {
 
             match output {
                 Ok(output) => {
+                    // The official CLI contract states that `codex login status` exits with 0
+                    // when credentials are present and prints the active authentication mode:
+                    // https://learn.chatgpt.com/docs/developer-commands?surface=cli#cli-codex-login
                     let logged_in = output.status.success();
+                    // Current Codex versions print, for example, `Logged in using ChatGPT`.
+                    // Authentication-mode parsing is display-only; an unexpected format falls
+                    // back to a safe generic label without changing the exit-code login result.
                     let authentication_method = logged_in.then(|| {
                         String::from_utf8_lossy(&output.stdout)
                             .trim()
