@@ -30,6 +30,10 @@ pub(crate) trait ClaudeAdapter {
 pub(crate) struct SystemClaudeAdapter;
 
 impl ClaudeAdapter for SystemClaudeAdapter {
+    /// Detects Claude Code and parses its structured authentication status response.
+    ///
+    /// Claude may return useful logged-out JSON with a non-zero exit status, so parsing is tried
+    /// before falling back to the normalized logged-out state.
     fn check_authentication(&self) -> Result<ClaudeAuthentication, AppError> {
         let executable = match resolve_claude_executable() {
             Ok(executable) => executable,
@@ -156,6 +160,8 @@ fn authentication_from_status(status: &str) -> Result<ClaudeAuthentication, AppE
             .auth_method
             .filter(|method| !method.is_empty())
             .map(|method| match method.as_str() {
+                // Present the implementation-specific OAuth token label as the account type the
+                // user recognizes in the UI.
                 "oauth_token" => "Claude account".to_string(),
                 _ => method,
             })
@@ -171,6 +177,7 @@ fn authentication_from_status(status: &str) -> Result<ClaudeAuthentication, AppE
     })
 }
 
+/// Resolves the first Claude executable candidate whose version command succeeds.
 fn resolve_claude_executable() -> Result<OsString, AppError> {
     for executable in claude_executable_candidates() {
         match Command::new(&executable)
@@ -357,6 +364,7 @@ fn terminate_child(child: &mut Child) -> Result<(), AppError> {
 }
 
 fn claude_executable_candidates() -> Vec<OsString> {
+    // Tauri desktop processes may inherit a smaller PATH than an interactive macOS shell.
     let mut candidates = vec![OsString::from("claude")];
 
     #[cfg(target_os = "macos")]

@@ -149,6 +149,10 @@ pub(crate) trait WorkBuddyAdapter {
 pub(crate) struct SystemWorkBuddyAdapter;
 
 impl WorkBuddyAdapter for SystemWorkBuddyAdapter {
+    /// Detects WorkBuddy and opens a temporary ACP session to verify account access.
+    ///
+    /// WorkBuddy does not expose a separate authentication-status command; successful session
+    /// creation is therefore the authoritative local login signal.
     fn check_authentication(&self) -> Result<WorkBuddyAuthentication, AppError> {
         let executable = match resolve_workbuddy_executable() {
             Ok(executable) => executable,
@@ -471,6 +475,7 @@ fn read_stream_events(stdout: impl io::Read, event_sender: SyncSender<Result<Str
 }
 
 fn workbuddy_executable_candidates() -> Vec<OsString> {
+    // The product has shipped under both CLI names, and the desktop bundle may not modify PATH.
     let mut candidates = vec![OsString::from("codebuddy"), OsString::from("cbc")];
 
     #[cfg(target_os = "macos")]
@@ -481,6 +486,10 @@ fn workbuddy_executable_candidates() -> Vec<OsString> {
     candidates
 }
 
+/// Runs the minimum ACP exchange needed to determine whether WorkBuddy can create a session.
+///
+/// The probe owns this child process and terminates it after receiving the authentication result;
+/// leaving it alive would make the separate process monitor report a false running state.
 fn probe_workbuddy_runtime(executable: &OsStr) -> Result<WorkBuddyAuthentication, AppError> {
     let mut child = Command::new(executable)
         .arg("--acp")
@@ -514,6 +523,7 @@ fn probe_workbuddy_runtime(executable: &OsStr) -> Result<WorkBuddyAuthentication
     probe_result
 }
 
+/// Initializes ACP, requests a disposable session, and normalizes its runtime configuration.
 fn initialize_acp_session(
     stdin: &mut ChildStdin,
     event_receiver: &Receiver<Result<String, AppError>>,
@@ -552,6 +562,7 @@ fn authentication_from_acp_response(
     }
 
     let result = response.result.ok_or(AppError::WorkBuddyProbeFailed)?;
+    // ACP returns a session identifier only after the local runtime accepts the active account.
     let logged_in = result.session_id.is_some();
     let model = result.models.map(|models| {
         let model_id = global_selection

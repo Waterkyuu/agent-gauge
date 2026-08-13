@@ -31,6 +31,10 @@ pub(crate) trait CodexAdapter {
 pub(crate) struct SystemCodexAdapter;
 
 impl CodexAdapter for SystemCodexAdapter {
+    /// Detects a local Codex executable and asks the CLI whether it has active credentials.
+    ///
+    /// A non-zero `codex login status` result means the executable exists but is logged out.
+    /// Missing candidates are skipped so bundled macOS executables can be used as fallbacks.
     fn check_authentication(&self) -> Result<CodexAuthentication, AppError> {
         for executable in codex_executable_candidates() {
             let output = Command::new(&executable)
@@ -50,6 +54,8 @@ impl CodexAdapter for SystemCodexAdapter {
                             .unwrap_or("authenticated credentials")
                             .to_string()
                     });
+                    // The login status command does not report the effective model. A short-lived
+                    // ephemeral App Server thread resolves the same defaults a new task will use.
                     let runtime_defaults = logged_in
                         .then(|| resolve_codex_runtime_defaults(&executable))
                         .transpose()?;
@@ -178,10 +184,12 @@ fn resolve_codex_executable() -> Result<OsString, AppError> {
     Err(AppError::CodexProbeFailed)
 }
 
+/// Starts an ephemeral App Server session to resolve the model defaults used by new Codex tasks.
 fn resolve_codex_runtime_defaults(executable: &OsStr) -> Result<CodexRuntimeDefaults, AppError> {
     with_app_server(executable, initialize_app_server_thread)
 }
 
+/// Runs one bounded App Server exchange and always terminates the child before returning.
 fn with_app_server<T>(
     executable: &OsStr,
     operation: impl FnOnce(&mut ChildStdin, &Receiver<Result<String, AppError>>) -> Result<T, AppError>,
@@ -413,6 +421,7 @@ fn terminate_child(child: &mut Child) -> Result<(), AppError> {
 }
 
 fn codex_executable_candidates() -> Vec<OsString> {
+    // GUI installations may bundle Codex without placing it on the desktop app's PATH.
     let mut candidates = vec![OsString::from("codex")];
 
     #[cfg(target_os = "macos")]
