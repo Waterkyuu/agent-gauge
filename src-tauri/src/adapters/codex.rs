@@ -416,19 +416,30 @@ fn codex_executable_candidates() -> Vec<OsString> {
     let mut candidates = vec![OsString::from("codex")];
 
     #[cfg(target_os = "macos")]
-    candidates.push(OsString::from(
-        "/Applications/Codex.app/Contents/Resources/codex",
-    ));
+    candidates.extend([
+        OsString::from("/Applications/Codex.app/Contents/Resources/codex"),
+        OsString::from("/Applications/ChatGPT.app/Contents/Resources/codex"),
+    ]);
 
     candidates
 }
 
 #[cfg(test)]
 mod tests {
-    use super::collect_run_events;
+    use super::{codex_executable_candidates, collect_run_events};
     use crate::error::AppError;
     use std::sync::mpsc;
     use std::time::Instant;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn discovers_codex_bundled_with_the_chatgpt_desktop_app() {
+        let candidates = codex_executable_candidates();
+
+        assert!(candidates.iter().any(|candidate| {
+            candidate == "/Applications/ChatGPT.app/Contents/Resources/codex"
+        }));
+    }
 
     #[test]
     fn reports_when_codex_requests_user_input() {
