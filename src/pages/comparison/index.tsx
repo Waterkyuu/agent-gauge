@@ -1,7 +1,7 @@
 import { MagicWand, Play } from "@gravity-ui/icons";
 import { Button, Card, TextArea } from "@heroui/react";
 import type { TFunction } from "i18next";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { checkAgentProcesses } from "@/api/agent";
 import { checkClaudeLogin, runClaudeTask } from "@/api/claude";
@@ -166,6 +166,8 @@ const ComparisonPage = () => {
 		codex: { status: "idle" },
 		workbuddy: { status: "idle" },
 	});
+	const activeLoginProbeCountRef = useRef(0);
+	const refreshProcessesAfterLoginRef = useRef<() => void>(() => {});
 	const isRunning = Object.values(runStates).some(
 		(state) => state.status === "running",
 	);
@@ -186,6 +188,7 @@ const ComparisonPage = () => {
 				}
 
 				pendingAgents.add(agent);
+				activeLoginProbeCountRef.current += 1;
 				AGENT_LOGIN_CHECKS[agent]()
 					.then((value) => {
 						if (isActive) {
@@ -203,7 +206,13 @@ const ComparisonPage = () => {
 							}));
 						}
 					})
-					.finally(() => pendingAgents.delete(agent));
+					.finally(() => {
+						pendingAgents.delete(agent);
+						activeLoginProbeCountRef.current -= 1;
+						if (activeLoginProbeCountRef.current === 0) {
+							refreshProcessesAfterLoginRef.current();
+						}
+					});
 			}
 		};
 
@@ -222,9 +231,9 @@ const ComparisonPage = () => {
 		let isActive = true;
 		let isChecking = false;
 
-		/** Refreshes the local process snapshot without overlapping requests. */
+		/** Refreshes the local process snapshot outside authentication probe windows. */
 		const refreshAgentProcesses = async () => {
-			if (isChecking) {
+			if (isChecking || activeLoginProbeCountRef.current > 0) {
 				return;
 			}
 			isChecking = true;
@@ -244,11 +253,13 @@ const ComparisonPage = () => {
 			}
 		};
 
+		refreshProcessesAfterLoginRef.current = refreshAgentProcesses;
 		refreshAgentProcesses();
 		const intervalId = window.setInterval(refreshAgentProcesses, 1000);
 
 		return () => {
 			isActive = false;
+			refreshProcessesAfterLoginRef.current = () => {};
 			window.clearInterval(intervalId);
 		};
 	}, []);

@@ -211,6 +211,56 @@ describe("App", () => {
 		).toBeInTheDocument();
 	});
 
+	// Verifies that authentication probe processes do not masquerade as active Agent runs.
+	it("keeps the idle status while authentication probes are running", async () => {
+		let claudeLoginProbeCount = 0;
+		let isClaudeLoginProbeRunning = false;
+		let finishClaudeLoginProbe = () => {};
+		const readyStatus = {
+			installed: true,
+			loggedIn: true,
+			authenticationMethod: "Claude account",
+			model: null,
+			reasoningEffort: null,
+		};
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				return Promise.resolve({
+					claude: isClaudeLoginProbeRunning,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			if (command === "check_claude_login") {
+				claudeLoginProbeCount += 1;
+				if (claudeLoginProbeCount === 1) {
+					return Promise.resolve(readyStatus);
+				}
+
+				isClaudeLoginProbeRunning = true;
+				return new Promise((resolve) => {
+					finishClaudeLoginProbe = () => {
+						isClaudeLoginProbeRunning = false;
+						resolve(readyStatus);
+					};
+				});
+			}
+			return Promise.resolve(readyStatus);
+		});
+
+		render(<App />);
+		expect(
+			await screen.findByText("Claude Code：已就绪，未运行"),
+		).toBeInTheDocument();
+
+		window.dispatchEvent(new Event("focus"));
+		await waitFor(() => expect(isClaudeLoginProbeRunning).toBe(true));
+		await new Promise((resolve) => window.setTimeout(resolve, 1100));
+
+		expect(screen.queryByText("Claude Code：运行中")).not.toBeInTheDocument();
+		finishClaudeLoginProbe();
+	});
+
 	// Verifies that one query runs across all selected products for comparison.
 	it("runs selected agents in parallel and compares their metrics", async () => {
 		invokeMock.mockImplementation((command: string) => {
