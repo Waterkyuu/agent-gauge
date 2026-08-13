@@ -57,6 +57,8 @@ const enUS = {
 		comparisonTitle: "Comparison results",
 		comparisonResult: "{{agent}} comparison result",
 		agentRunRunning: "Running…",
+		agentRunFinished: "{{task}} task has finished in {{agent}}",
+		viewResult: "View the result",
 		firstToken: "First token",
 		totalDuration: "Total duration",
 		totalTokens: "Total tokens",

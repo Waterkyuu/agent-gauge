@@ -1,5 +1,5 @@
 import { MagicWand, Play } from "@gravity-ui/icons";
-import { Button, Card, TextArea } from "@heroui/react";
+import { Button, Card, TextArea, Toast } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -378,6 +378,10 @@ const ComparisonPage = () => {
 		}
 
 		const activeAgents = [...runnableAgents];
+		const taskLabel =
+			normalizedQuery.length > 40
+				? `${normalizedQuery.slice(0, 40)}…`
+				: normalizedQuery;
 		setRunStates({
 			claude: activeAgents.includes("claude")
 				? { status: "running" }
@@ -398,6 +402,13 @@ const ComparisonPage = () => {
 						...current,
 						[agent]: { status: "succeeded", result },
 					}));
+					Toast.toast.success(
+						t("agentRunFinished", {
+							task: taskLabel,
+							agent: t(`agentNames.${agent}`),
+						}),
+						{ description: t("viewResult") },
+					);
 				} catch (error) {
 					setRunStates((current) => ({
 						...current,
@@ -406,6 +417,13 @@ const ComparisonPage = () => {
 							errorMessage: getErrorMessage(error, t("requestFailed")),
 						},
 					}));
+					Toast.toast.danger(
+						t("agentRunFinished", {
+							task: taskLabel,
+							agent: t(`agentNames.${agent}`),
+						}),
+						{ description: t("viewResult") },
+					);
 				}
 			}),
 		);

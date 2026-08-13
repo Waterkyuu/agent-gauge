@@ -470,6 +470,12 @@ describe("App", () => {
 		expect(
 			within(workbuddyResult).getByText("WorkBuddy 完成"),
 		).toBeInTheDocument();
+		for (const agentName of ["Codex", "Claude Code", "WorkBuddy"]) {
+			expect(
+				screen.getByText(`只回复任务完成 任务 ${agentName} 已结束`),
+			).toBeInTheDocument();
+		}
+		expect(screen.getAllByText("请查看结果")).toHaveLength(3);
 	});
 
 	// Verifies that deselected products are excluded from a comparison run.
@@ -565,5 +571,7 @@ describe("App", () => {
 			within(codexResult).getByText("Codex benchmark failed"),
 		).toBeInTheDocument();
 		expect(screen.getAllByText("成功结果")).toHaveLength(2);
+		expect(screen.getByText("执行对比 任务 Codex 已结束")).toBeInTheDocument();
+		expect(screen.getAllByText("请查看结果")).toHaveLength(3);
 	});
 });

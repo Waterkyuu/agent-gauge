@@ -56,6 +56,8 @@ const zhCN = {
 		comparisonTitle: "对比结果",
 		comparisonResult: "{{agent}} 对比结果",
 		agentRunRunning: "执行中…",
+		agentRunFinished: "{{task}} 任务 {{agent}} 已结束",
+		viewResult: "请查看结果",
 		firstToken: "首 token",
 		totalDuration: "总耗时",
 		totalTokens: "总 token",
