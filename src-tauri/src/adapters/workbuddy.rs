@@ -292,21 +292,8 @@ fn resolve_workbuddy_executable() -> Result<OsString, AppError> {
 
 fn run_workbuddy_task(executable: &OsStr, query: &str) -> Result<AgentRunOutput, AppError> {
     let started_at = Instant::now();
-    let mut child = Command::new(executable)
-        .args([
-            "--print",
-            query,
-            "--output-format",
-            "stream-json",
-            "--include-partial-messages",
-            "--verbose",
-            "--permission-mode",
-            "acceptEdits",
-            "--no-session-persistence",
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+    let global_selection = read_workbuddy_global_selection();
+    let mut child = build_workbuddy_task_command(executable, query, global_selection.as_ref())
         .spawn()
         .map_err(|_| AppError::WorkBuddyProtocolFailed)?;
     let stdout = match child.stdout.take() {
@@ -335,6 +322,43 @@ fn run_workbuddy_task(executable: &OsStr, query: &str) -> Result<AgentRunOutput,
         .map_err(|_| AppError::WorkBuddyProtocolFailed)?;
 
     result
+}
+
+fn build_workbuddy_task_command(
+    executable: &OsStr,
+    query: &str,
+    global_selection: Option<&WorkBuddyGlobalSelection>,
+) -> Command {
+    let mut command = Command::new(executable);
+    if let Some(selection) = global_selection {
+        command.args(["--model", selection.id.as_str()]);
+        if selection.is_thinking {
+            if let Some(effort) = selection.reasoning_effort.as_deref().filter(|effort| {
+                matches!(
+                    *effort,
+                    "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+                )
+            }) {
+                command.args(["--effort", effort]);
+            }
+        }
+    }
+    command
+        .args([
+            "--print",
+            query,
+            "--output-format",
+            "stream-json",
+            "--include-partial-messages",
+            "--verbose",
+            "--permission-mode",
+            "acceptEdits",
+            "--no-session-persistence",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    command
 }
 
 fn collect_workbuddy_events(
@@ -602,7 +626,7 @@ fn terminate_child(child: &mut Child) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        authentication_from_acp_response, collect_workbuddy_events,
+        authentication_from_acp_response, build_workbuddy_task_command, collect_workbuddy_events,
         global_selection_from_local_storage, AcpMessage, StreamUsage,
     };
     use crate::domain::codex_run::TokenUsage;
@@ -686,6 +710,43 @@ mod tests {
 
         assert_eq!(authentication.model.as_deref(), Some("Kimi-K3"));
         assert_eq!(authentication.reasoning_effort.as_deref(), Some("enabled"));
+    }
+
+    #[test]
+    fn task_command_uses_global_model_and_keeps_default_reasoning() {
+        let selection = super::WorkBuddyGlobalSelection {
+            id: "kimi-k3".to_string(),
+            is_thinking: true,
+            reasoning_effort: None,
+        };
+
+        let command =
+            build_workbuddy_task_command("codebuddy".as_ref(), "test prompt", Some(&selection));
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(args.windows(2).any(|args| args == ["--model", "kimi-k3"]));
+        assert!(!args.iter().any(|arg| arg == "--effort"));
+    }
+
+    #[test]
+    fn task_command_uses_explicit_global_reasoning() {
+        let selection = super::WorkBuddyGlobalSelection {
+            id: "kimi-k3".to_string(),
+            is_thinking: true,
+            reasoning_effort: Some("high".to_string()),
+        };
+
+        let command =
+            build_workbuddy_task_command("codebuddy".as_ref(), "test prompt", Some(&selection));
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(args.windows(2).any(|args| args == ["--effort", "high"]));
     }
 
     #[test]
