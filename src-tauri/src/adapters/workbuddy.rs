@@ -18,6 +18,8 @@ const MAX_EVENT_BYTES: u64 = 1024 * 1024;
 const EVENT_QUEUE_CAPACITY: usize = 64;
 const WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX: &str = "cb-newtask:model";
 const MAX_WORKBUDDY_LOCAL_STORAGE_BYTES: u64 = 16 * 1024 * 1024;
+const ACP_AUTH_REQUIRED_CODE: i64 = -32000;
+const JSON_RPC_METHOD_NOT_FOUND_CODE: i64 = -32601;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -235,6 +237,14 @@ struct AcpResult {
     session_id: Option<String>,
     models: Option<AcpModels>,
     config_options: Option<Vec<AcpConfigOption>>,
+    user_info: Option<AcpUserInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpUserInfo {
+    user_id: String,
+    auth_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -260,7 +270,9 @@ struct AcpConfigOption {
 }
 
 #[derive(Debug, Deserialize)]
-struct AcpError {}
+struct AcpError {
+    code: i64,
+}
 
 impl From<StreamUsage> for TokenUsage {
     fn from(usage: StreamUsage) -> Self {
@@ -532,33 +544,93 @@ fn initialize_acp_session(
         stdin,
         r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"agent-gauge","version":"0.1.0"}}}"#,
     )?;
-    wait_for_acp_response(event_receiver, 0)?;
+    let initialize_response = wait_for_acp_response(event_receiver, 0)?;
+    if initialize_response.error.is_some() {
+        return Err(AppError::WorkBuddyProbeFailed);
+    }
+    // CodeBuddy's read-only extension reports the current account without creating a session.
+    write_acp_message(
+        stdin,
+        r#"{"jsonrpc":"2.0","id":1,"method":"_codebuddy.ai/getUserInfo","params":{}}"#,
+    )?;
+    let user_info_response = wait_for_acp_response(event_receiver, 1)?;
+    let global_selection = read_workbuddy_global_selection();
+    if let Some(authentication) =
+        authentication_from_user_info_response(user_info_response, global_selection.as_ref())?
+    {
+        return Ok(authentication);
+    }
+
+    // Older CodeBuddy releases may not expose getUserInfo. In that case only, create a
+    // disposable session as a compatibility probe and read its effective configuration.
     let cwd = std::env::current_dir().map_err(|_| AppError::WorkBuddyProbeFailed)?;
     let session_request = serde_json::json!({
         "jsonrpc": "2.0",
-        "id": 1,
+        "id": 2,
         "method": "session/new",
         "params": {"cwd": cwd, "mcpServers": []}
     });
     write_acp_message(stdin, &session_request.to_string())?;
-    let response = wait_for_acp_response(event_receiver, 1)?;
+    let response = wait_for_acp_response(event_receiver, 2)?;
 
-    let global_selection = read_workbuddy_global_selection();
     authentication_from_acp_response(response, global_selection.as_ref())
+}
+
+/// Converts CodeBuddy's read-only account response; `None` requests the legacy session fallback.
+fn authentication_from_user_info_response(
+    response: AcpMessage,
+    global_selection: Option<&WorkBuddyGlobalSelection>,
+) -> Result<Option<WorkBuddyAuthentication>, AppError> {
+    if let Some(error) = response.error {
+        return if error.code == JSON_RPC_METHOD_NOT_FOUND_CODE {
+            Ok(None)
+        } else {
+            Err(AppError::WorkBuddyProbeFailed)
+        };
+    }
+
+    let user_info = response
+        .result
+        .ok_or(AppError::WorkBuddyProbeFailed)?
+        .user_info;
+    let logged_in = user_info
+        .as_ref()
+        .is_some_and(|user| !user.user_id.trim().is_empty());
+    let authentication_method = user_info
+        .and_then(|user| user.auth_type)
+        .filter(|auth_type| !auth_type.trim().is_empty())
+        .or_else(|| logged_in.then(|| "WorkBuddy account".to_string()));
+    let model = logged_in
+        .then(|| global_selection.map(|selection| selection.id.clone()))
+        .flatten();
+    let reasoning_effort = logged_in
+        .then(|| global_selection.map(|selection| selection.thought_level().to_string()))
+        .flatten();
+
+    Ok(Some(WorkBuddyAuthentication {
+        installed: true,
+        logged_in,
+        authentication_method,
+        model,
+        reasoning_effort,
+    }))
 }
 
 fn authentication_from_acp_response(
     response: AcpMessage,
     global_selection: Option<&WorkBuddyGlobalSelection>,
 ) -> Result<WorkBuddyAuthentication, AppError> {
-    if response.error.is_some() {
-        return Ok(WorkBuddyAuthentication {
-            installed: true,
-            logged_in: false,
-            authentication_method: None,
-            model: None,
-            reasoning_effort: None,
-        });
+    if let Some(error) = response.error {
+        if error.code == ACP_AUTH_REQUIRED_CODE {
+            return Ok(WorkBuddyAuthentication {
+                installed: true,
+                logged_in: false,
+                authentication_method: None,
+                model: None,
+                reasoning_effort: None,
+            });
+        }
+        return Err(AppError::WorkBuddyProbeFailed);
     }
 
     let result = response.result.ok_or(AppError::WorkBuddyProbeFailed)?;
@@ -637,7 +709,8 @@ fn terminate_child(child: &mut Child) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        authentication_from_acp_response, build_workbuddy_task_command, collect_workbuddy_events,
+        authentication_from_acp_response, authentication_from_user_info_response,
+        build_workbuddy_task_command, collect_workbuddy_events,
         global_selection_from_local_storage, AcpMessage, StreamUsage,
     };
     use crate::domain::codex_run::TokenUsage;
@@ -702,6 +775,69 @@ mod tests {
         assert!(authentication.logged_in);
         assert_eq!(authentication.model.as_deref(), Some("Kimi-K3"));
         assert_eq!(authentication.reasoning_effort.as_deref(), Some("enabled"));
+    }
+
+    #[test]
+    fn reads_login_state_without_creating_an_acp_session() {
+        let response: AcpMessage = serde_json::from_str(
+            r#"{"id":1,"result":{"userInfo":{"userId":"user-1","authType":"external"}}}"#,
+        )
+        .expect("fixture should deserialize");
+        let global_selection = super::WorkBuddyGlobalSelection {
+            id: "kimi-k3".to_string(),
+            is_thinking: true,
+            reasoning_effort: Some("high".to_string()),
+        };
+
+        let authentication =
+            authentication_from_user_info_response(response, Some(&global_selection))
+                .expect("valid user info should produce authentication state")
+                .expect("supported user info method should not request a session fallback");
+
+        assert!(authentication.logged_in);
+        assert_eq!(
+            authentication.authentication_method.as_deref(),
+            Some("external")
+        );
+        assert_eq!(authentication.model.as_deref(), Some("kimi-k3"));
+        assert_eq!(authentication.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn reports_logged_out_when_acp_has_no_current_user() {
+        let response: AcpMessage =
+            serde_json::from_str(r#"{"id":1,"result":{}}"#).expect("fixture should deserialize");
+
+        let authentication = authentication_from_user_info_response(response, None)
+            .expect("empty user info should be a valid logged-out state")
+            .expect("supported user info method should not request a session fallback");
+
+        assert!(!authentication.logged_in);
+        assert_eq!(authentication.authentication_method, None);
+    }
+
+    #[test]
+    fn requests_session_fallback_when_user_info_method_is_unsupported() {
+        let response: AcpMessage = serde_json::from_str(
+            r#"{"id":1,"error":{"code":-32601,"message":"Method not found"}}"#,
+        )
+        .expect("fixture should deserialize");
+
+        let authentication = authentication_from_user_info_response(response, None)
+            .expect("method-not-found should select the compatibility fallback");
+
+        assert_eq!(authentication, None);
+    }
+
+    #[test]
+    fn preserves_non_authentication_acp_probe_failures() {
+        let response: AcpMessage =
+            serde_json::from_str(r#"{"id":1,"error":{"code":-32002,"message":"Internal error"}}"#)
+                .expect("fixture should deserialize");
+
+        let result = authentication_from_user_info_response(response, None);
+
+        assert_eq!(result, Err(crate::error::AppError::WorkBuddyProbeFailed));
     }
 
     #[test]
