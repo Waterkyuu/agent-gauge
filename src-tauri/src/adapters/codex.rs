@@ -1,9 +1,12 @@
 use crate::adapters::agent::AgentAdapter;
 use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
+use crate::platform::codex_config::codex_config_paths;
 use serde::Deserialize;
 use std::ffi::{OsStr, OsString};
+use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{
@@ -16,6 +19,7 @@ use std::time::{Duration, Instant};
 const APP_SERVER_START_TIMEOUT: Duration = Duration::from_secs(30);
 const CODEX_RUN_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const MAX_EVENT_BYTES: u64 = 1024 * 1024;
+const MAX_CODEX_CONFIG_BYTES: u64 = 1024 * 1024;
 const EVENT_QUEUE_CAPACITY: usize = 64;
 const MAX_RUNTIME_DEFAULT_RESOLUTION_ATTEMPTS: usize = 2;
 
@@ -75,12 +79,12 @@ impl CodexAdapter for SystemCodexAdapter {
                             .unwrap_or("authenticated credentials")
                             .to_string()
                     });
-                    // The login status command does not report the effective model. A short-lived
-                    // ephemeral App Server thread resolves the same defaults a new task will use.
-                    let runtime_defaults = if logged_in {
+                    // Explicit config values are authoritative for this display. App Server remains
+                    // the fallback when either field cannot be resolved safely from local TOML.
+                    let runtime_settings = if logged_in {
                         Some(
                             self.runtime_defaults_cache
-                                .resolve(|| resolve_codex_runtime_defaults(&executable))?,
+                                .resolve(|| resolve_codex_runtime_settings(&executable))?,
                         )
                     } else {
                         self.runtime_defaults_cache.invalidate();
@@ -91,11 +95,11 @@ impl CodexAdapter for SystemCodexAdapter {
                         installed: true,
                         logged_in,
                         authentication_method,
-                        model: runtime_defaults
+                        model: runtime_settings
                             .as_ref()
-                            .map(|defaults| defaults.model.clone()),
-                        reasoning_effort: runtime_defaults
-                            .and_then(|defaults| defaults.reasoning_effort),
+                            .map(|settings| settings.model.clone()),
+                        reasoning_effort: runtime_settings
+                            .and_then(|settings| settings.reasoning_effort),
                     });
                 }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
@@ -159,10 +163,22 @@ struct CodexRuntimeDefaults {
     reasoning_effort: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexRuntimeSettings {
+    model: String,
+    reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct CodexConfigLayer {
+    model: Option<String>,
+    model_reasoning_effort: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct CachedCodexRuntimeDefaults {
     revision: u64,
-    value: CodexRuntimeDefaults,
+    value: CodexRuntimeSettings,
 }
 
 #[derive(Debug, Default)]
@@ -198,8 +214,8 @@ impl CodexRuntimeDefaultsCache {
 
     fn resolve(
         &self,
-        mut resolver: impl FnMut() -> Result<CodexRuntimeDefaults, AppError>,
-    ) -> Result<CodexRuntimeDefaults, AppError> {
+        mut resolver: impl FnMut() -> Result<CodexRuntimeSettings, AppError>,
+    ) -> Result<CodexRuntimeSettings, AppError> {
         if !self.state.enabled.load(Ordering::Acquire) {
             return resolver();
         }
@@ -289,6 +305,76 @@ fn resolve_codex_executable() -> Result<OsString, AppError> {
     }
 
     Err(AppError::CodexProbeFailed)
+}
+
+/// Resolves explicit TOML settings first and delegates incomplete state to Codex itself.
+fn resolve_codex_runtime_settings(executable: &OsStr) -> Result<CodexRuntimeSettings, AppError> {
+    if let Some(settings) = read_codex_runtime_settings() {
+        return Ok(settings);
+    }
+
+    resolve_codex_runtime_defaults(executable).map(|defaults| CodexRuntimeSettings {
+        model: defaults.model,
+        reasoning_effort: defaults.reasoning_effort,
+    })
+}
+
+/// Reads bounded configuration layers in precedence order without exposing unrelated settings.
+fn read_codex_runtime_settings() -> Option<CodexRuntimeSettings> {
+    let mut contents = Vec::new();
+
+    for path in codex_config_paths() {
+        match read_bounded_codex_config(&path) {
+            Ok(Some(content)) => contents.push(content),
+            Ok(None) => {}
+            Err(()) => return None,
+        }
+    }
+
+    runtime_settings_from_config_layers(contents.iter().map(String::as_str))
+}
+
+fn read_bounded_codex_config(path: &Path) -> Result<Option<String>, ()> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(()),
+    };
+    let mut bytes = Vec::new();
+    file.take(MAX_CODEX_CONFIG_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ())?;
+    if bytes.len() as u64 > MAX_CODEX_CONFIG_BYTES {
+        return Err(());
+    }
+
+    String::from_utf8(bytes).map(Some).map_err(|_| ())
+}
+
+fn runtime_settings_from_config_layers<'a>(
+    layers: impl IntoIterator<Item = &'a str>,
+) -> Option<CodexRuntimeSettings> {
+    let mut model = None;
+    let mut reasoning_effort = None;
+
+    for content in layers {
+        let layer: CodexConfigLayer = toml::from_str(content).ok()?;
+        if let Some(value) = non_empty_config_value(layer.model) {
+            model = Some(value);
+        }
+        if let Some(value) = non_empty_config_value(layer.model_reasoning_effort) {
+            reasoning_effort = Some(value);
+        }
+    }
+
+    Some(CodexRuntimeSettings {
+        model: model?,
+        reasoning_effort: Some(reasoning_effort?),
+    })
+}
+
+fn non_empty_config_value(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.trim().is_empty())
 }
 
 /// Starts an ephemeral App Server session to resolve the model defaults used by new Codex tasks.
@@ -543,8 +629,8 @@ fn codex_executable_candidates() -> Vec<OsString> {
 #[cfg(test)]
 mod tests {
     use super::{
-        codex_executable_candidates, collect_run_events, CodexRuntimeDefaults,
-        CodexRuntimeDefaultsCache,
+        codex_executable_candidates, collect_run_events, runtime_settings_from_config_layers,
+        CodexRuntimeDefaultsCache, CodexRuntimeSettings,
     };
     use crate::error::AppError;
     use std::sync::mpsc;
@@ -582,14 +668,42 @@ mod tests {
     }
 
     #[test]
+    fn reads_complete_runtime_settings_from_layered_codex_config() {
+        let settings = runtime_settings_from_config_layers([
+            r#"
+                model = "gpt-5.6-sol"
+                model_reasoning_effort = "medium"
+                [features]
+                js_repl = false
+            "#,
+            r#"model_reasoning_effort = "high""#,
+        ])
+        .expect("complete configuration should provide runtime settings");
+
+        assert_eq!(settings.model, "gpt-5.6-sol");
+        assert_eq!(settings.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn requires_app_server_fallback_for_incomplete_or_invalid_codex_config() {
+        assert_eq!(
+            runtime_settings_from_config_layers([r#"model = "gpt-5.6-sol""#]),
+            None
+        );
+        assert_eq!(
+            runtime_settings_from_config_layers(["model = [invalid"]),
+            None
+        );
+    }
+
+    #[test]
     fn caches_runtime_defaults_until_the_configuration_is_invalidated() {
         let cache = CodexRuntimeDefaultsCache::default();
         cache.enable();
         let mut resolution_count = 0;
         let mut resolve = || {
             resolution_count += 1;
-            Ok(CodexRuntimeDefaults {
-                thread_id: format!("thread-{resolution_count}"),
+            Ok(CodexRuntimeSettings {
                 model: format!("model-{resolution_count}"),
                 reasoning_effort: Some("high".to_string()),
             })
@@ -618,8 +732,7 @@ mod tests {
         let mut resolution_count = 0;
         let mut resolve = || {
             resolution_count += 1;
-            Ok(CodexRuntimeDefaults {
-                thread_id: format!("thread-{resolution_count}"),
+            Ok(CodexRuntimeSettings {
                 model: format!("model-{resolution_count}"),
                 reasoning_effort: None,
             })
