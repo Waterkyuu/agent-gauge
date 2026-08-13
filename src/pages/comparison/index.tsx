@@ -5,7 +5,11 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { checkAgentProcesses } from "@/api/agent";
 import { checkClaudeLogin, runClaudeTask } from "@/api/claude";
-import { checkCodexLogin, runCodexTask } from "@/api/codex";
+import {
+	checkCodexLogin,
+	onCodexConfigChanged,
+	runCodexTask,
+} from "@/api/codex";
 import { checkWorkBuddyLogin, runWorkBuddyTask } from "@/api/workbuddy";
 import type {
 	AgentKind,
@@ -211,62 +215,85 @@ const ComparisonPage = () => {
 
 		let isActive = true;
 		const pendingAgents = new Set<AgentKind>();
+		const queuedAgents = new Set<AgentKind>();
 
-		/** Refreshes every login state independently without overlapping probes. */
+		/** Refreshes one login state without overlapping another probe for that Agent. */
+		const refreshLoginState = (agent: AgentKind) => {
+			if (pendingAgents.has(agent)) {
+				return;
+			}
+
+			pendingAgents.add(agent);
+			activeLoginProbeCountRef.current += 1;
+			AGENT_LOGIN_CHECKS[agent]()
+				.then((value) => {
+					if (isActive) {
+						const previous = loginStatesRef.current[agent];
+						if (
+							previous.status === "resolved" &&
+							areRuntimeStatusesEqual(previous.value, value)
+						) {
+							return;
+						}
+						const next: LoginStates = {
+							...loginStatesRef.current,
+							[agent]: { status: "resolved", value },
+						};
+						loginStatesRef.current = next;
+						setLoginStates(next);
+					}
+				})
+				.catch(() => {
+					if (isActive && loginStatesRef.current[agent].status !== "failed") {
+						const next: LoginStates = {
+							...loginStatesRef.current,
+							[agent]: { status: "failed" },
+						};
+						loginStatesRef.current = next;
+						setLoginStates(next);
+					}
+				})
+				.finally(() => {
+					pendingAgents.delete(agent);
+					activeLoginProbeCountRef.current -= 1;
+					if (isActive && queuedAgents.delete(agent)) {
+						refreshLoginState(agent);
+						return;
+					}
+					if (activeLoginProbeCountRef.current === 0) {
+						refreshProcessesAfterLoginRef.current();
+					}
+				});
+		};
+
+		/** Preserves a native change notification that arrives during an active probe. */
+		const refreshLoginStateAfterChange = (agent: AgentKind) => {
+			if (pendingAgents.has(agent)) {
+				queuedAgents.add(agent);
+				return;
+			}
+			refreshLoginState(agent);
+		};
+
+		/** Refreshes every login state independently. */
 		const refreshLoginStates = () => {
 			for (const agent of AGENT_KINDS) {
-				if (pendingAgents.has(agent)) {
-					continue;
-				}
-
-				pendingAgents.add(agent);
-				activeLoginProbeCountRef.current += 1;
-				AGENT_LOGIN_CHECKS[agent]()
-					.then((value) => {
-						if (isActive) {
-							const previous = loginStatesRef.current[agent];
-							if (
-								previous.status === "resolved" &&
-								areRuntimeStatusesEqual(previous.value, value)
-							) {
-								return;
-							}
-							const next: LoginStates = {
-								...loginStatesRef.current,
-								[agent]: { status: "resolved", value },
-							};
-							loginStatesRef.current = next;
-							setLoginStates(next);
-						}
-					})
-					.catch(() => {
-						if (isActive && loginStatesRef.current[agent].status !== "failed") {
-							const next: LoginStates = {
-								...loginStatesRef.current,
-								[agent]: { status: "failed" },
-							};
-							loginStatesRef.current = next;
-							setLoginStates(next);
-						}
-					})
-					.finally(() => {
-						pendingAgents.delete(agent);
-						activeLoginProbeCountRef.current -= 1;
-						if (activeLoginProbeCountRef.current === 0) {
-							refreshProcessesAfterLoginRef.current();
-						}
-					});
+				refreshLoginState(agent);
 			}
 		};
 
 		refreshLoginStates();
 		const intervalId = window.setInterval(refreshLoginStates, 5000);
 		window.addEventListener("focus", refreshLoginStates);
+		const stopCodexConfigListener = onCodexConfigChanged(() => {
+			refreshLoginStateAfterChange("codex");
+		});
 
 		return () => {
 			isActive = false;
 			window.clearInterval(intervalId);
 			window.removeEventListener("focus", refreshLoginStates);
+			void stopCodexConfigListener.then((stopListening) => stopListening());
 		};
 	}, [isRunning]);
 

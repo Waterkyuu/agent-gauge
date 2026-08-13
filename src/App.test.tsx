@@ -6,10 +6,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import "./i18n";
 
-const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
+const { invokeMock, listenMock, tauriEventListeners } = vi.hoisted(() => ({
+	invokeMock: vi.fn(),
+	listenMock: vi.fn(),
+	tauriEventListeners: new Map<string, (event: { payload: unknown }) => void>(),
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
 	invoke: invokeMock,
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+	listen: listenMock,
 }));
 
 // Covers the user-visible local agent task workflow.
@@ -17,6 +25,14 @@ describe("App", () => {
 	beforeEach(() => {
 		window.history.replaceState({}, "", "/");
 		invokeMock.mockReset();
+		listenMock.mockReset();
+		tauriEventListeners.clear();
+		listenMock.mockImplementation(
+			(eventName: string, listener: (event: { payload: unknown }) => void) => {
+				tauriEventListeners.set(eventName, listener);
+				return Promise.resolve(() => tauriEventListeners.delete(eventName));
+			},
+		);
 		invokeMock.mockImplementation((command: string) => {
 			if (command === "check_agent_processes") {
 				return Promise.resolve({
@@ -295,6 +311,57 @@ describe("App", () => {
 		expect(
 			await screen.findByText("Codex：已就绪，未运行"),
 		).toBeInTheDocument();
+	});
+
+	// Verifies that a native Codex configuration event refreshes model defaults immediately.
+	it("refreshes Codex runtime defaults after its configuration changes", async () => {
+		let codexModel = "gpt-5.6-sol";
+		let codexProbeCount = 0;
+		let finishPendingProbe = () => {};
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				return Promise.resolve({
+					claude: false,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			const status = {
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "ChatGPT",
+				model: command === "check_codex_login" ? codexModel : null,
+				reasoningEffort: command === "check_codex_login" ? "high" : null,
+			};
+			if (command !== "check_codex_login") {
+				return Promise.resolve(status);
+			}
+
+			codexProbeCount += 1;
+			if (codexProbeCount !== 2) {
+				return Promise.resolve(status);
+			}
+
+			return new Promise((resolve) => {
+				finishPendingProbe = () => resolve(status);
+			});
+		});
+
+		render(<App />);
+		expect(await screen.findByText("gpt-5.6-sol")).toBeInTheDocument();
+
+		codexModel = "gpt-5.6-terra";
+		const listener = tauriEventListeners.get("codex-config-changed");
+		expect(listener).toBeTypeOf("function");
+		listener?.({ payload: null });
+		await waitFor(() => expect(codexProbeCount).toBe(2));
+
+		codexModel = "gpt-5.6-luna";
+		listener?.({ payload: null });
+		finishPendingProbe();
+
+		expect(await screen.findByText("gpt-5.6-luna")).toBeInTheDocument();
+		expect(codexProbeCount).toBe(3);
 	});
 
 	// Verifies that authentication probe processes do not masquerade as active Agent runs.
