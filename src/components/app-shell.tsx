@@ -5,7 +5,7 @@ import {
 	LayoutSideContent,
 	ScalesBalanced,
 } from "@gravity-ui/icons";
-import { Button } from "@heroui/react";
+import { Button, Tooltip } from "@heroui/react";
 import { cn } from "cnfast";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -41,21 +41,31 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 
 	return (
 		<div className="min-h-[100dvh] bg-canvas text-ink lg:flex">
-			<Button
-				aria-controls="desktop-sidebar"
-				aria-expanded={!isSidebarCollapsed}
-				aria-label={t(isSidebarCollapsed ? "expandSidebar" : "collapseSidebar")}
-				className={cn(
-					"fixed top-[6px] z-20 hidden rounded-md bg-transparent text-body shadow-none hover:text-ink motion-safe:transition-[left,color] motion-safe:duration-200 lg:inline-flex",
-					isSidebarCollapsed ? "left-[72px]" : "left-[140px]",
-				)}
-				isIconOnly
-				onPress={() => setIsSidebarCollapsed((isCollapsed) => !isCollapsed)}
-				size="sm"
-				variant="ghost"
-			>
-				<LayoutSideContent aria-hidden="true" className="size-5" />
-			</Button>
+			<Tooltip delay={0}>
+				<Button
+					aria-controls="desktop-sidebar"
+					aria-expanded={!isSidebarCollapsed}
+					aria-label={t(
+						isSidebarCollapsed ? "expandSidebar" : "collapseSidebar",
+					)}
+					className={cn(
+						"fixed top-[6px] z-20 hidden rounded-md bg-transparent text-body shadow-none hover:text-ink motion-safe:transition-[left,color] motion-safe:duration-200 lg:inline-flex",
+						isSidebarCollapsed ? "left-[72px]" : "left-[140px]",
+					)}
+					isIconOnly
+					onPress={() => setIsSidebarCollapsed((isCollapsed) => !isCollapsed)}
+					size="sm"
+					variant="ghost"
+				>
+					<LayoutSideContent aria-hidden="true" className="size-5" />
+				</Button>
+				<Tooltip.Content
+					className="w-max max-w-none whitespace-nowrap break-normal"
+					placement="bottom"
+				>
+					{t(isSidebarCollapsed ? "expandSidebar" : "collapseSidebar")}
+				</Tooltip.Content>
+			</Tooltip>
 			<aside
 				className={cn(
 					"sticky top-0 hidden h-[100dvh] w-[224px] max-w-[224px] shrink-0 overflow-hidden border-r border-hairline bg-surface-soft motion-safe:transition-[max-width,border-color] motion-safe:duration-200 lg:block",

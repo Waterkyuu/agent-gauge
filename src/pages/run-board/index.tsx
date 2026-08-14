@@ -7,7 +7,7 @@ import {
 	Play,
 	TriangleExclamation,
 } from "@gravity-ui/icons";
-import { Button, Card } from "@heroui/react";
+import { Button, Card, Tooltip } from "@heroui/react";
 import { cn } from "cnfast";
 import { type ComponentType, type SVGProps, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -69,26 +69,42 @@ const RunBoardPage = () => {
 					aria-label={t("runBoard.layoutSelection")}
 					className="flex shrink-0 items-center gap-xs rounded-lg bg-surface-soft p-xs"
 				>
-					<Button
-						aria-pressed={layout === "vertical"}
-						aria-label={t("runBoard.verticalLayout")}
-						className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
-						onPress={() => setLayout("vertical")}
-						size="sm"
-						variant="ghost"
-					>
-						<LayoutColumns3 aria-hidden="true" className="size-4" />
-					</Button>
-					<Button
-						aria-pressed={layout === "horizontal"}
-						aria-label={t("runBoard.horizontalLayout")}
-						className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
-						onPress={() => setLayout("horizontal")}
-						size="sm"
-						variant="ghost"
-					>
-						<LayoutRows3 aria-hidden="true" className="size-4" />
-					</Button>
+					<Tooltip delay={0}>
+						<Button
+							aria-pressed={layout === "vertical"}
+							aria-label={t("runBoard.verticalLayout")}
+							className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
+							onPress={() => setLayout("vertical")}
+							size="sm"
+							variant="ghost"
+						>
+							<LayoutColumns3 aria-hidden="true" className="size-4" />
+						</Button>
+						<Tooltip.Content
+							className="w-max max-w-none whitespace-nowrap break-normal"
+							placement="bottom"
+						>
+							{t("runBoard.verticalLayout")}
+						</Tooltip.Content>
+					</Tooltip>
+					<Tooltip delay={0}>
+						<Button
+							aria-pressed={layout === "horizontal"}
+							aria-label={t("runBoard.horizontalLayout")}
+							className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
+							onPress={() => setLayout("horizontal")}
+							size="sm"
+							variant="ghost"
+						>
+							<LayoutRows3 aria-hidden="true" className="size-4" />
+						</Button>
+						<Tooltip.Content
+							className="w-max max-w-none whitespace-nowrap break-normal"
+							placement="bottom"
+						>
+							{t("runBoard.horizontalLayout")}
+						</Tooltip.Content>
+					</Tooltip>
 				</fieldset>
 			</header>
 

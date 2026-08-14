@@ -135,6 +135,23 @@ describe("App", () => {
 		expect(screen.getByText(/切换语言|Switch language/)).toBeInTheDocument();
 	});
 
+	// Verifies that the icon-only sidebar control explains its current action.
+	it("describes the sidebar toggle on hover", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+
+		await user.hover(
+			screen.getByRole("button", {
+				name: /收起侧边栏|Collapse sidebar/,
+			}),
+		);
+
+		const sidebarTooltip = await screen.findByRole("tooltip");
+		expect(sidebarTooltip).toHaveTextContent(/收起侧边栏|Collapse sidebar/);
+		expect(sidebarTooltip).toHaveClass("whitespace-nowrap");
+		expect(sidebarTooltip).toHaveClass("max-w-none");
+	});
+
 	// Verifies that overlay title-bar controls do not cover desktop content.
 	it("reserves title-bar space above desktop content", () => {
 		render(<App />);
@@ -206,6 +223,41 @@ describe("App", () => {
 		expect(verticalButton).toHaveAttribute("aria-pressed", "false");
 		expect(horizontalButton).toHaveAttribute("aria-pressed", "true");
 		expect(board).toHaveAttribute("data-layout", "horizontal");
+	});
+
+	// Verifies that both icon-only board layout controls expose their meaning.
+	it("describes both run board layout controls on hover", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+
+		await user.click(
+			within(screen.getByRole("complementary")).getByRole("button", {
+				name: /运行看板|Run board/,
+			}),
+		);
+
+		const layoutGroup = await screen.findByRole("group", {
+			name: /切换看板布局|Switch run board layout/,
+		});
+		const verticalButton = within(layoutGroup).getByRole("button", {
+			name: /竖面板|Vertical panel/,
+		});
+		const horizontalButton = within(layoutGroup).getByRole("button", {
+			name: /水平面板|Horizontal panel/,
+		});
+
+		await user.hover(verticalButton);
+		const verticalTooltip = await screen.findByRole("tooltip");
+		expect(verticalTooltip).toHaveTextContent(/竖面板|Vertical panel/);
+		expect(verticalTooltip).toHaveClass("whitespace-nowrap");
+		expect(verticalTooltip).toHaveClass("max-w-none");
+
+		await user.unhover(verticalButton);
+		await user.hover(horizontalButton);
+		const horizontalTooltip = await screen.findByRole("tooltip");
+		expect(horizontalTooltip).toHaveTextContent(/水平面板|Horizontal panel/);
+		expect(horizontalTooltip).toHaveClass("whitespace-nowrap");
+		expect(horizontalTooltip).toHaveClass("max-w-none");
 	});
 
 	// Verifies that run cards keep a stable footprint and clamp overflowing copy.
