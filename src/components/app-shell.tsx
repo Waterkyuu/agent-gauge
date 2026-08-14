@@ -63,7 +63,7 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 				id="desktop-sidebar"
 			>
 				{!isSidebarCollapsed && (
-					<div className="flex h-full w-[224px] flex-col p-4">
+					<div className="flex h-full w-[224px] flex-col p-4 pt-14">
 						<div className="flex items-start gap-1">
 							<button
 								aria-label={t("appName")}
@@ -176,7 +176,7 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 				</nav>
 			</header>
 
-			<div className="min-w-0 flex-1">{children}</div>
+			<div className="min-w-0 flex-1 lg:pt-14">{children}</div>
 		</div>
 	);
 };

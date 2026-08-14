@@ -135,6 +135,16 @@ describe("App", () => {
 		expect(screen.getByText(/切换语言|Switch language/)).toBeInTheDocument();
 	});
 
+	// Verifies that overlay title-bar controls do not cover desktop content.
+	it("reserves title-bar space above desktop content", () => {
+		render(<App />);
+
+		expect(screen.getByRole("complementary").firstElementChild).toHaveClass(
+			"pt-14",
+		);
+		expect(screen.getByRole("main").parentElement).toHaveClass("lg:pt-14");
+	});
+
 	// Verifies that routing updates the URL and redirects unsupported locations.
 	it("navigates lazy routes and redirects unknown paths", async () => {
 		const user = userEvent.setup();
