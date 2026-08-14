@@ -12,6 +12,7 @@ mod commands {
     pub(crate) mod workbuddy;
 }
 mod dto {
+    pub(crate) mod agent;
     pub(crate) mod claude;
     pub(crate) mod codex;
     pub(crate) mod workbuddy;
