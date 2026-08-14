@@ -86,7 +86,7 @@ const AgentComparisonCard = ({
 				) : result ? (
 					<CircleCheck
 						aria-hidden="true"
-						className="size-[18px] text-charcoal"
+						className="size-[18px] text-terminal-green"
 					/>
 				) : null}
 			</header>
