@@ -1,4 +1,4 @@
-use crate::adapters::claude::SystemClaudeAdapter;
+use crate::adapters::claude::{ClaudeRuntimeSettingsCache, SystemClaudeAdapter};
 use crate::domain::codex_run::{AgentRunMetrics, AgentRunOutput, TokenUsage};
 use crate::dto::claude::ClaudeLoginStatus;
 use crate::error::{AppError, IpcError};
@@ -72,8 +72,11 @@ fn duration_millis(duration: std::time::Duration) -> u64 {
 
 /// Checks whether the locally installed Claude Code runtime has active credentials.
 #[tauri::command]
-pub async fn check_claude_login() -> Result<ClaudeLoginStatus, IpcError> {
-    tauri::async_runtime::spawn_blocking(|| resolve_claude_login(&SystemClaudeAdapter))
+pub async fn check_claude_login(
+    runtime_settings_cache: tauri::State<'_, ClaudeRuntimeSettingsCache>,
+) -> Result<ClaudeLoginStatus, IpcError> {
+    let adapter = SystemClaudeAdapter::new(runtime_settings_cache.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || resolve_claude_login(&adapter))
         .await
         .map_err(|_| IpcError::from(AppError::WorkerFailed))?
         .map_err(Into::into)
@@ -83,12 +86,12 @@ pub async fn check_claude_login() -> Result<ClaudeLoginStatus, IpcError> {
 #[tauri::command]
 pub async fn run_claude_task(
     request: RunClaudeTaskRequest,
+    runtime_settings_cache: tauri::State<'_, ClaudeRuntimeSettingsCache>,
 ) -> Result<RunClaudeTaskResponse, IpcError> {
-    tauri::async_runtime::spawn_blocking(move || {
-        run_agent_task(&SystemClaudeAdapter, &request.query)
-    })
-    .await
-    .map_err(|_| IpcError::from(AppError::WorkerFailed))?
-    .map(Into::into)
-    .map_err(Into::into)
+    let adapter = SystemClaudeAdapter::new(runtime_settings_cache.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || run_agent_task(&adapter, &request.query))
+        .await
+        .map_err(|_| IpcError::from(AppError::WorkerFailed))?
+        .map(Into::into)
+        .map_err(Into::into)
 }
