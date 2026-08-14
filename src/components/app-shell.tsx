@@ -3,6 +3,7 @@ import {
 	Globe,
 	LayoutColumns3,
 	LayoutSideContent,
+	ScalesBalanced,
 } from "@gravity-ui/icons";
 import { Button } from "@heroui/react";
 import { cn } from "cnfast";
@@ -19,7 +20,7 @@ type AppShellProps = {
 };
 
 const NAVIGATION_ITEMS = [
-	{ path: "/", labelKey: "navigation.compare", icon: ChartColumn },
+	{ path: "/", labelKey: "navigation.compare", icon: ScalesBalanced },
 	{ path: "/runs", labelKey: "navigation.runs", icon: LayoutColumns3 },
 ] as const;
 
