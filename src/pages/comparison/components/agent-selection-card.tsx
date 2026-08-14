@@ -43,7 +43,7 @@ const formatReasoningEffort = (effort: string | null, t: TFunction) => {
  * Renders one Agent as a compact row in the target selection matrix.
  *
  * @example
- * <AgentSelectionCard agent="codex" statusMessage="Codex: running" statusTone="bg-zinc-800" runtimeStatus={status} isSelected isDisabled={false} onToggle={setAgent} />
+ * <AgentSelectionCard agent="codex" statusMessage="Codex: running" statusTone="bg-primary" runtimeStatus={status} isSelected isDisabled={false} onToggle={setAgent} />
  */
 const AgentSelectionCard = ({
 	agent,
@@ -67,17 +67,17 @@ const AgentSelectionCard = ({
 			aria-describedby={descriptionId}
 			aria-label={t(`agentNames.${agent}`)}
 			aria-pressed={isSelected}
-			className="group grid w-full gap-3 border-b border-[var(--app-line)] px-4 py-4 text-left outline-none transition-colors last:border-b-0 hover:bg-[var(--app-hover)] focus-visible:bg-[var(--app-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zinc-800 disabled:cursor-not-allowed disabled:opacity-45 sm:grid-cols-[minmax(0,1.2fr)_minmax(150px,1fr)_24px] sm:items-center"
+			className="group grid w-full gap-md border-b border-hairline px-lg py-lg text-left outline-none transition-colors last:border-b-0 hover:bg-surface-soft focus-visible:bg-surface-soft focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring disabled:cursor-not-allowed disabled:opacity-45 sm:grid-cols-[minmax(0,1.2fr)_minmax(150px,1fr)_24px] sm:items-center sm:px-xl"
 			disabled={isDisabled}
 			onClick={() => onToggle(agent)}
 			type="button"
 		>
-			<span className="flex min-w-0 items-center gap-3">
-				<span className="grid size-9 shrink-0 place-items-center rounded-lg border border-[var(--app-line)] bg-[var(--app-raised)]">
+			<span className="flex min-w-0 items-center gap-md">
+				<span className="grid size-9 shrink-0 place-items-center rounded-lg border border-hairline bg-canvas">
 					<AgentLogo agent={agent} className="size-5" />
 				</span>
 				<span className="min-w-0">
-					<span className="flex items-center gap-2 text-sm font-semibold">
+					<span className="flex items-center gap-sm text-body-sm-strong font-medium">
 						{t(`agentNames.${agent}`)}
 						<span
 							aria-hidden="true"
@@ -86,27 +86,27 @@ const AgentSelectionCard = ({
 					</span>
 					<span
 						aria-hidden="true"
-						className="mt-0.5 block truncate text-xs text-[var(--app-muted)]"
+						className="mt-xxs block truncate text-caption-sm text-body"
 					>
 						{statusMessage}
 					</span>
 				</span>
 			</span>
 
-			<span aria-hidden="true" className="grid grid-cols-2 gap-3">
+			<span aria-hidden="true" className="grid grid-cols-2 gap-md">
 				<span className="block min-w-0">
-					<span className="block text-[11px] text-[var(--app-faint)]">
+					<span className="block text-caption-sm text-mute">
 						{t("currentModel")}
 					</span>
-					<span className="mt-0.5 block truncate font-mono text-[11px] font-medium text-[var(--app-ink)]">
+					<span className="mt-xxs block truncate font-mono text-caption-sm font-medium text-ink">
 						{modelName}
 					</span>
 				</span>
 				<span className="block min-w-0">
-					<span className="block text-[11px] text-[var(--app-faint)]">
+					<span className="block text-caption-sm text-mute">
 						{t("reasoningEffort")}
 					</span>
-					<span className="mt-0.5 block truncate font-mono text-[11px] font-medium text-[var(--app-ink)]">
+					<span className="mt-xxs block truncate font-mono text-caption-sm font-medium text-ink">
 						{reasoningEffort}
 					</span>
 				</span>
@@ -114,8 +114,8 @@ const AgentSelectionCard = ({
 
 			<span
 				className={cn(
-					"hidden size-5 place-items-center rounded-md border border-[var(--app-line)] text-transparent transition sm:grid",
-					isSelected && "border-zinc-800 bg-zinc-800 text-zinc-50",
+					"hidden size-5 place-items-center rounded-full border border-hairline-strong text-transparent transition sm:grid",
+					isSelected && "border-primary bg-primary text-on-primary",
 				)}
 			>
 				<Check aria-hidden="true" className="size-3" />

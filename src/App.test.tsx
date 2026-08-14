@@ -679,11 +679,11 @@ describe("App", () => {
 		expect(within(codexResult).getByText("Read")).toBeInTheDocument();
 		expect(within(codexResult).getByText("Bash")).toBeInTheDocument();
 		expect(within(codexResult).getByText("21.00 s")).toHaveClass(
-			"text-red-700",
+			"bg-terminal-yellow/20",
 		);
 		expect(within(claudeResult).getByText("540 ms")).toBeInTheDocument();
 		expect(within(claudeResult).getByText("61.00 s")).toHaveClass(
-			"text-red-900",
+			"bg-terminal-red/15",
 		);
 		expect(within(workbuddyResult).getByText("14.62 s")).toBeInTheDocument();
 		expect(
