@@ -24,7 +24,7 @@ const enUS = {
 		tagline: "Local agent performance measurement",
 		title: "Run one task across agents. Compare what matters.",
 		description:
-			"Select local agent products, run the same task in parallel, and compare first-token latency, total duration, token usage, and responses.",
+			"Select local agent products, run the same task in parallel, and compare response speed, thinking time, tool use, token usage, and responses.",
 		queryLabel: "Task query",
 		queryPlaceholder:
 			"For example: Summarize the main features of this repository without modifying files.",
@@ -65,6 +65,10 @@ const enUS = {
 		inputTokens: "Input",
 		outputTokens: "Output",
 		reasoningTokens: "Reasoning",
+		thinkingDuration: "Thinking time",
+		toolCallCount: "Tool calls",
+		toolCallsTitle: "Tool details",
+		noToolCalls: "No tools called in this run",
 		responseTitle: "Response",
 		metricUnavailable: "Unavailable",
 		requestFailed: "The task failed. Please try again.",
