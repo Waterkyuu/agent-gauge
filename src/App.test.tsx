@@ -187,6 +187,8 @@ describe("App", () => {
 
 		expect(verticalButton).toHaveAttribute("aria-pressed", "true");
 		expect(horizontalButton).toHaveAttribute("aria-pressed", "false");
+		expect(verticalButton).not.toHaveTextContent("竖面板");
+		expect(horizontalButton).not.toHaveTextContent("水平面板");
 		expect(board).toHaveAttribute("data-layout", "vertical");
 
 		await user.click(horizontalButton);
@@ -194,6 +196,35 @@ describe("App", () => {
 		expect(verticalButton).toHaveAttribute("aria-pressed", "false");
 		expect(horizontalButton).toHaveAttribute("aria-pressed", "true");
 		expect(board).toHaveAttribute("data-layout", "horizontal");
+	});
+
+	// Verifies that run cards keep a stable footprint and clamp overflowing copy.
+	it("keeps run cards at fixed dimensions with clamped text", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+
+		await user.click(
+			within(screen.getByRole("complementary")).getByRole("button", {
+				name: /运行看板|Run board/,
+			}),
+		);
+
+		const card = (await screen.findAllByRole("article"))[0];
+
+		expect(card).toHaveClass(
+			"h-48",
+			"w-[18rem]",
+			"max-w-full",
+			"overflow-hidden",
+		);
+		expect(card.querySelector("h3")).toHaveClass(
+			"line-clamp-2",
+			"overflow-hidden",
+		);
+		expect(card.querySelector("p")).toHaveClass(
+			"line-clamp-2",
+			"overflow-hidden",
+		);
 	});
 
 	// Verifies that the running process state refreshes without reloading the UI.

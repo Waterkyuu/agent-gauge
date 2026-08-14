@@ -71,23 +71,23 @@ const RunBoardPage = () => {
 				>
 					<Button
 						aria-pressed={layout === "vertical"}
+						aria-label={t("runBoard.verticalLayout")}
 						className="rounded-md px-2.5 text-xs text-[var(--app-muted)] aria-pressed:bg-[var(--app-surface)] aria-pressed:text-[var(--app-ink)] aria-pressed:shadow-[0_1px_2px_rgba(24,24,23,0.08)]"
 						onPress={() => setLayout("vertical")}
 						size="sm"
 						variant="ghost"
 					>
 						<LayoutColumns3 aria-hidden="true" className="size-4" />
-						{t("runBoard.verticalLayout")}
 					</Button>
 					<Button
 						aria-pressed={layout === "horizontal"}
+						aria-label={t("runBoard.horizontalLayout")}
 						className="rounded-md px-2.5 text-xs text-[var(--app-muted)] aria-pressed:bg-[var(--app-surface)] aria-pressed:text-[var(--app-ink)] aria-pressed:shadow-[0_1px_2px_rgba(24,24,23,0.08)]"
 						onPress={() => setLayout("horizontal")}
 						size="sm"
 						variant="ghost"
 					>
 						<LayoutRows3 aria-hidden="true" className="size-4" />
-						{t("runBoard.horizontalLayout")}
 					</Button>
 				</fieldset>
 			</header>
@@ -159,8 +159,7 @@ const RunBoardPage = () => {
 									items.map((item) => (
 										<Card
 											className={cn(
-												"rounded-xl border border-[var(--app-line)] bg-[var(--app-raised)] shadow-none transition-colors hover:border-zinc-400",
-												layout === "horizontal" && "lg:min-w-64 lg:flex-1",
+												"h-48 w-[18rem] max-w-full overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-raised)] shadow-none transition-colors hover:border-zinc-400",
 											)}
 											key={item.id}
 											role="article"
@@ -168,18 +167,20 @@ const RunBoardPage = () => {
 											<Card.Content className="p-4">
 												<div className="flex items-center justify-between gap-3 text-[11px] text-[var(--app-faint)]">
 													<span className="font-mono">{item.id}</span>
-													<span className="flex items-center gap-1.5">
+													<span className="flex min-w-0 max-w-[55%] items-center gap-1.5 truncate">
 														<AgentLogo
 															agent={item.agent}
 															className="size-3.5"
 														/>
-														{t(`agentNames.${item.agent}`)}
+														<span className="truncate">
+															{t(`agentNames.${item.agent}`)}
+														</span>
 													</span>
 												</div>
-												<h3 className="mt-4 text-sm font-semibold tracking-[-0.015em]">
+												<h3 className="mt-4 line-clamp-2 overflow-hidden text-sm font-semibold tracking-[-0.015em]">
 													{t(item.titleKey)}
 												</h3>
-												<p className="mt-1.5 text-xs leading-5 text-[var(--app-muted)]">
+												<p className="mt-1.5 line-clamp-2 overflow-hidden text-xs leading-5 text-[var(--app-muted)]">
 													{t(item.descriptionKey)}
 												</p>
 												<div className="mt-4 flex items-center justify-between border-t border-[var(--app-line)] pt-3 font-mono text-[11px] text-[var(--app-faint)]">
