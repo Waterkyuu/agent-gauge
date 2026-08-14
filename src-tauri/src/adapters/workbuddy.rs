@@ -190,6 +190,7 @@ struct StreamMessage {
     result: Option<String>,
     usage: Option<StreamUsage>,
     is_error: Option<bool>,
+    message: Option<StreamConversationMessage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -198,6 +199,7 @@ struct StreamEvent {
     event_type: String,
     content_block: Option<StreamContentBlock>,
     delta: Option<StreamDelta>,
+    index: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,6 +207,26 @@ struct StreamContentBlock {
     #[serde(rename = "type")]
     block_type: String,
     name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamConversationMessage {
+    /// Full assistant/user content emitted between low-level stream events.
+    #[serde(default)]
+    content: Vec<StreamConversationContent>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamConversationContent {
+    /// Content discriminator such as tool_use or tool_result.
+    #[serde(rename = "type")]
+    content_type: String,
+    /// Unique identifier present on a tool_use block.
+    id: Option<String>,
+    /// Tool name present on a tool_use block.
+    name: Option<String>,
+    /// Identifier that links a tool_result back to its tool_use block.
+    tool_use_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -392,7 +414,56 @@ fn collect_workbuddy_events(
         let message: StreamMessage =
             serde_json::from_str(&line).map_err(|_| AppError::WorkBuddyProtocolFailed)?;
 
+        if message.message_type == "assistant" {
+            // WorkBuddy mirrors the stream-json tool lifecycle but keeps its own collector state.
+            for content in message
+                .message
+                .map(|message| message.content)
+                .unwrap_or_default()
+            {
+                if content.content_type == "tool_use" {
+                    if content.name.as_deref() == Some("AskUserQuestion") {
+                        return Err(AppError::WorkBuddyNeedsInput);
+                    }
+                    if let (Some(id), Some(name)) = (content.id, content.name) {
+                        collector.record_tool_started(&id, &name, started_at.elapsed());
+                    }
+                }
+            }
+            continue;
+        }
+
+        if message.message_type == "user" {
+            // A tool_result closes only the matching tool_use id, including concurrent calls.
+            for content in message
+                .message
+                .map(|message| message.content)
+                .unwrap_or_default()
+            {
+                if content.content_type == "tool_result" {
+                    if let Some(id) = content.tool_use_id {
+                        collector.record_tool_finished(&id, started_at.elapsed());
+                    }
+                }
+            }
+            continue;
+        }
+
         if message.message_type == "stream_event" {
+            if let Some(event) = message.event.as_ref() {
+                // Thinking blocks use stream indexes because they have no tool-style identifier.
+                let interval_id = format!("thinking-{}", event.index.unwrap_or(0));
+                if event.event_type == "content_block_start"
+                    && event
+                        .content_block
+                        .as_ref()
+                        .is_some_and(|block| block.block_type == "thinking")
+                {
+                    collector.record_thinking_started(&interval_id, started_at.elapsed());
+                } else if event.event_type == "content_block_stop" {
+                    collector.record_thinking_finished(&interval_id, started_at.elapsed());
+                }
+            }
             if message
                 .event
                 .as_ref()
@@ -759,6 +830,28 @@ mod tests {
             output.metrics.token_usage.map(|usage| usage.total_tokens),
             Some(12)
         );
+    }
+
+    #[test]
+    fn records_workbuddy_thinking_and_tool_use_messages() {
+        let (sender, receiver) = mpsc::sync_channel(5);
+        for fixture in [
+            r#"{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"thinking"}}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_stop","index":0}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Bash"}]}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1"}]}}"#,
+            r#"{"type":"result","subtype":"success","is_error":false,"result":"OK"}"#,
+        ] {
+            sender
+                .send(Ok(fixture.to_string()))
+                .expect("fixture should be queued");
+        }
+
+        let output = collect_workbuddy_events(&receiver, Instant::now())
+            .expect("valid tool lifecycle should complete");
+
+        assert_eq!(output.metrics.tool_calls.len(), 1);
+        assert_eq!(output.metrics.tool_calls[0].name, "Bash");
     }
 
     #[test]
