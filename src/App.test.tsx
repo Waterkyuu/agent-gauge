@@ -364,6 +364,63 @@ describe("App", () => {
 		expect(codexProbeCount).toBe(3);
 	});
 
+	// Verifies that a native Claude configuration event refreshes model and effort immediately.
+	it("refreshes Claude runtime settings after its configuration changes", async () => {
+		let claudeModel = "claude-sonnet-4-6";
+		let claudeEffort = "medium";
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				return Promise.resolve({
+					claude: false,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+
+			return Promise.resolve({
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "Claude account",
+				model: command === "check_claude_login" ? claudeModel : "other-model",
+				reasoningEffort:
+					command === "check_claude_login" ? claudeEffort : "high",
+			});
+		});
+
+		render(<App />);
+		expect(await screen.findByText("claude-sonnet-4-6")).toBeInTheDocument();
+		expect(screen.getByText("中 (medium)")).toBeInTheDocument();
+
+		claudeModel = "claude-opus-4-6";
+		claudeEffort = "high";
+		const listener = tauriEventListeners.get("claude-config-changed");
+		expect(listener).toBeTypeOf("function");
+		listener?.({ payload: null });
+
+		expect(await screen.findByText("claude-opus-4-6")).toBeInTheDocument();
+		expect(
+			within(screen.getByRole("button", { name: "Claude Code" })).getByText(
+				"高 (high)",
+			),
+		).toBeInTheDocument();
+	});
+
+	// Verifies that native configuration subscriptions are removed when the page unmounts.
+	it("removes agent configuration listeners on unmount", async () => {
+		const { unmount } = render(<App />);
+		await waitFor(() => {
+			expect(tauriEventListeners.has("codex-config-changed")).toBe(true);
+			expect(tauriEventListeners.has("claude-config-changed")).toBe(true);
+		});
+
+		unmount();
+
+		await waitFor(() => {
+			expect(tauriEventListeners.has("codex-config-changed")).toBe(false);
+			expect(tauriEventListeners.has("claude-config-changed")).toBe(false);
+		});
+	});
+
 	// Verifies that authentication probe processes do not masquerade as active Agent runs.
 	it("keeps the idle status while authentication probes are running", async () => {
 		let claudeLoginProbeCount = 0;

@@ -4,7 +4,11 @@ import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { checkAgentProcesses } from "@/api/agent";
-import { checkClaudeLogin, runClaudeTask } from "@/api/claude";
+import {
+	checkClaudeLogin,
+	onClaudeConfigChanged,
+	runClaudeTask,
+} from "@/api/claude";
 import {
 	checkCodexLogin,
 	onCodexConfigChanged,
@@ -285,15 +289,24 @@ const ComparisonPage = () => {
 		refreshLoginStates();
 		const intervalId = window.setInterval(refreshLoginStates, 5000);
 		window.addEventListener("focus", refreshLoginStates);
-		const stopCodexConfigListener = onCodexConfigChanged(() => {
-			refreshLoginStateAfterChange("codex");
-		});
+		const stopConfigListeners = Promise.all([
+			onCodexConfigChanged(() => {
+				refreshLoginStateAfterChange("codex");
+			}),
+			onClaudeConfigChanged(() => {
+				refreshLoginStateAfterChange("claude");
+			}),
+		]);
 
 		return () => {
 			isActive = false;
 			window.clearInterval(intervalId);
 			window.removeEventListener("focus", refreshLoginStates);
-			void stopCodexConfigListener.then((stopListening) => stopListening());
+			stopConfigListeners.then((stopListeners) => {
+				for (const stopListening of stopListeners) {
+					stopListening();
+				}
+			});
 		};
 	}, [isRunning]);
 
