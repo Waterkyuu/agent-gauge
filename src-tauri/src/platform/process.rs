@@ -1,6 +1,11 @@
 use crate::error::AppError;
 use std::process::{Command, Stdio};
 
+/// Returns the executable name reported for every process visible to the current user.
+///
+/// Windows exposes image names through `tasklist`, while Unix-like systems expose the command
+/// path through `ps`. The adapter layer normalizes these platform-specific values and decides
+/// which supported Agent, if any, each process belongs to.
 pub(crate) fn running_process_names() -> Result<Vec<String>, AppError> {
     #[cfg(target_os = "windows")]
     let output = Command::new("tasklist")
@@ -28,6 +33,8 @@ pub(crate) fn running_process_names() -> Result<Vec<String>, AppError> {
     return Ok(stdout
         .lines()
         .filter_map(|line| {
+            // CSV output starts with the quoted image name; the remaining fields are irrelevant
+            // to Agent detection and may contain localized values.
             line.strip_prefix('"')
                 .and_then(|line| line.split("\",").next())
                 .map(str::to_string)

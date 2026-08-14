@@ -1,6 +1,15 @@
 const enUS = {
 	translation: {
 		appName: "AgentGauge",
+		appEdition: "Local agent lab",
+		mainNavigation: "Main navigation",
+		collapseSidebar: "Collapse sidebar",
+		expandSidebar: "Expand sidebar",
+		loadingPage: "Loading page",
+		navigation: {
+			compare: "Compare",
+			runs: "Run board",
+		},
 		agentNames: {
 			claude: "Claude Code",
 			codex: "Codex",
@@ -48,6 +57,8 @@ const enUS = {
 		comparisonTitle: "Comparison results",
 		comparisonResult: "{{agent}} comparison result",
 		agentRunRunning: "Running…",
+		agentRunFinished: "{{task}} task has finished in {{agent}}",
+		viewResult: "View the result",
 		firstToken: "First token",
 		totalDuration: "Total duration",
 		totalTokens: "Total tokens",
@@ -57,6 +68,56 @@ const enUS = {
 		responseTitle: "Response",
 		metricUnavailable: "Unavailable",
 		requestFailed: "The task failed. Please try again.",
+		runBoard: {
+			title: "Agent run board",
+			description:
+				"Track local agent tasks that are running, awaiting input, completed, or interrupted.",
+			empty: "No tasks in this status.",
+			status: {
+				running: "Running",
+				waiting: "Awaiting user",
+				finish: "Finish",
+				error: "Error",
+			},
+			statusDescription: {
+				running: "In progress",
+				waiting: "Needs an answer to continue",
+				finish: "Completed successfully",
+				error: "Needs attention",
+			},
+			items: {
+				repositoryAudit: {
+					title: "Repository architecture audit",
+					description:
+						"Map module boundaries and flag highly coupled code paths.",
+				},
+				releaseNotes: {
+					title: "Generate release notes",
+					description:
+						"Summarize this week's commits into a user-facing update.",
+				},
+				apiComparison: {
+					title: "API performance comparison",
+					description:
+						"Compare response latency and token use across three agents.",
+				},
+				testCoverage: {
+					title: "Test coverage analysis",
+					description:
+						"Find critical business branches without regression coverage.",
+				},
+				migrationPlan: {
+					title: "Database migration plan",
+					description:
+						"The target database version is required before migration steps can continue.",
+				},
+				dependencyScan: {
+					title: "Dependency security scan",
+					description:
+						"The dependency manifest failed to parse; the lockfile needs an update.",
+				},
+			},
+		},
 	},
 } as const;
 

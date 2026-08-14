@@ -30,6 +30,10 @@ pub(crate) trait ClaudeAdapter {
 pub(crate) struct SystemClaudeAdapter;
 
 impl ClaudeAdapter for SystemClaudeAdapter {
+    /// Detects Claude Code and parses its structured authentication status response.
+    ///
+    /// Claude may return useful logged-out JSON with a non-zero exit status, so parsing is tried
+    /// before falling back to the normalized logged-out state.
     fn check_authentication(&self) -> Result<ClaudeAuthentication, AppError> {
         let executable = match resolve_claude_executable() {
             Ok(executable) => executable,
@@ -82,7 +86,15 @@ struct StreamMessage {
 struct StreamEvent {
     #[serde(rename = "type")]
     event_type: String,
+    content_block: Option<StreamContentBlock>,
     delta: Option<StreamDelta>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamContentBlock {
+    #[serde(rename = "type")]
+    block_type: String,
+    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -148,6 +160,8 @@ fn authentication_from_status(status: &str) -> Result<ClaudeAuthentication, AppE
             .auth_method
             .filter(|method| !method.is_empty())
             .map(|method| match method.as_str() {
+                // Present the implementation-specific OAuth token label as the account type the
+                // user recognizes in the UI.
                 "oauth_token" => "Claude account".to_string(),
                 _ => method,
             })
@@ -163,6 +177,7 @@ fn authentication_from_status(status: &str) -> Result<ClaudeAuthentication, AppE
     })
 }
 
+/// Resolves the first Claude executable candidate whose version command succeeds.
 fn resolve_claude_executable() -> Result<OsString, AppError> {
     for executable in claude_executable_candidates() {
         match Command::new(&executable)
@@ -243,6 +258,18 @@ fn collect_claude_events(
             serde_json::from_str(&line).map_err(|_| AppError::ClaudeProtocolFailed)?;
 
         if message.message_type == "stream_event" {
+            if message
+                .event
+                .as_ref()
+                .filter(|event| event.event_type == "content_block_start")
+                .and_then(|event| event.content_block.as_ref())
+                .is_some_and(|block| {
+                    block.block_type == "tool_use"
+                        && block.name.as_deref() == Some("AskUserQuestion")
+                })
+            {
+                return Err(AppError::ClaudeNeedsInput);
+            }
             if let Some(delta) = message
                 .event
                 .filter(|event| event.event_type == "content_block_delta")
@@ -337,6 +364,7 @@ fn terminate_child(child: &mut Child) -> Result<(), AppError> {
 }
 
 fn claude_executable_candidates() -> Vec<OsString> {
+    // Tauri desktop processes may inherit a smaller PATH than an interactive macOS shell.
     let mut candidates = vec![OsString::from("claude")];
 
     #[cfg(target_os = "macos")]
@@ -410,5 +438,18 @@ mod tests {
             output.metrics.token_usage.map(|usage| usage.total_tokens),
             Some(22)
         );
+    }
+
+    #[test]
+    fn reports_when_claude_asks_the_user_a_question() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        sender
+            .send(Ok(r#"{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"tool_use","name":"AskUserQuestion"}}}"#.to_string()))
+            .expect("fixture should be queued");
+        drop(sender);
+
+        let result = collect_claude_events(&receiver, Instant::now());
+
+        assert_eq!(result, Err(crate::error::AppError::ClaudeNeedsInput));
     }
 }

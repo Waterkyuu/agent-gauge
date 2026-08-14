@@ -1,6 +1,15 @@
 const zhCN = {
 	translation: {
 		appName: "AgentGauge",
+		appEdition: "本地 Agent 实验室",
+		mainNavigation: "主导航",
+		collapseSidebar: "收起侧边栏",
+		expandSidebar: "展开侧边栏",
+		loadingPage: "正在加载页面",
+		navigation: {
+			compare: "性能对比",
+			runs: "运行看板",
+		},
 		agentNames: {
 			claude: "Claude Code",
 			codex: "Codex",
@@ -47,6 +56,8 @@ const zhCN = {
 		comparisonTitle: "对比结果",
 		comparisonResult: "{{agent}} 对比结果",
 		agentRunRunning: "执行中…",
+		agentRunFinished: "{{task}} 任务 {{agent}} 已结束",
+		viewResult: "请查看结果",
 		firstToken: "首 token",
 		totalDuration: "总耗时",
 		totalTokens: "总 token",
@@ -56,6 +67,50 @@ const zhCN = {
 		responseTitle: "响应",
 		metricUnavailable: "不可用",
 		requestFailed: "任务执行失败，请重试。",
+		runBoard: {
+			title: "Agent 运行看板",
+			description:
+				"按状态追踪本地 Agent 任务，查看正在执行、等待回答、已完成和异常中断的工作。",
+			empty: "此状态下暂无任务。",
+			status: {
+				running: "运行中",
+				waiting: "等待用户",
+				finish: "已完成",
+				error: "异常",
+			},
+			statusDescription: {
+				running: "正在执行",
+				waiting: "需要回答后继续",
+				finish: "已顺利完成",
+				error: "需要处理",
+			},
+			items: {
+				repositoryAudit: {
+					title: "仓库架构审计",
+					description: "梳理模块边界并标记高耦合代码路径。",
+				},
+				releaseNotes: {
+					title: "生成发布说明",
+					description: "汇总本周提交并生成面向用户的更新摘要。",
+				},
+				apiComparison: {
+					title: "API 性能对比",
+					description: "比较三个 Agent 的响应延迟与 token 消耗。",
+				},
+				testCoverage: {
+					title: "测试覆盖分析",
+					description: "定位缺少回归测试的关键业务分支。",
+				},
+				migrationPlan: {
+					title: "数据库迁移方案",
+					description: "需要确认目标数据库版本后继续生成迁移步骤。",
+				},
+				dependencyScan: {
+					title: "依赖安全扫描",
+					description: "依赖清单解析失败，需要更新锁文件。",
+				},
+			},
+		},
 	},
 } as const;
 

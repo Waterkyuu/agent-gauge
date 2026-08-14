@@ -1,20 +1,38 @@
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Profiler } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import "./i18n";
 
-const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
+const { invokeMock, listenMock, tauriEventListeners } = vi.hoisted(() => ({
+	invokeMock: vi.fn(),
+	listenMock: vi.fn(),
+	tauriEventListeners: new Map<string, (event: { payload: unknown }) => void>(),
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
 	invoke: invokeMock,
 }));
 
+vi.mock("@tauri-apps/api/event", () => ({
+	listen: listenMock,
+}));
+
 // Covers the user-visible local agent task workflow.
 describe("App", () => {
 	beforeEach(() => {
+		window.history.replaceState({}, "", "/");
 		invokeMock.mockReset();
+		listenMock.mockReset();
+		tauriEventListeners.clear();
+		listenMock.mockImplementation(
+			(eventName: string, listener: (event: { payload: unknown }) => void) => {
+				tauriEventListeners.set(eventName, listener);
+				return Promise.resolve(() => tauriEventListeners.delete(eventName));
+			},
+		);
 		invokeMock.mockImplementation((command: string) => {
 			if (command === "check_agent_processes") {
 				return Promise.resolve({
@@ -85,6 +103,66 @@ describe("App", () => {
 		expect(localStorage.getItem("language")).toBe("en-US");
 	});
 
+	// Verifies that the desktop sidebar remains navigable after it is collapsed.
+	it("collapses and expands the desktop sidebar", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+
+		const collapseButton = screen.getByRole("button", {
+			name: /收起侧边栏|Collapse sidebar/,
+		});
+		expect(collapseButton).toHaveAttribute("aria-expanded", "true");
+
+		await user.click(collapseButton);
+
+		expect(
+			screen.getByRole("button", { name: /展开侧边栏|Expand sidebar/ }),
+		).toHaveAttribute("aria-expanded", "false");
+		expect(
+			screen.queryByText(/本地 Agent 实验室|Local agent lab/),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByText(/切换语言|Switch language/),
+		).not.toBeInTheDocument();
+
+		await user.click(
+			screen.getByRole("button", { name: /展开侧边栏|Expand sidebar/ }),
+		);
+
+		expect(
+			screen.getByText(/本地 Agent 实验室|Local agent lab/),
+		).toBeInTheDocument();
+		expect(screen.getByText(/切换语言|Switch language/)).toBeInTheDocument();
+	});
+
+	// Verifies that routing updates the URL and redirects unsupported locations.
+	it("navigates lazy routes and redirects unknown paths", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+
+		await user.click(
+			within(screen.getByRole("complementary")).getByRole("button", {
+				name: /运行看板|Run board/,
+			}),
+		);
+		expect(window.location.pathname).toBe("/runs");
+		expect(
+			await screen.findByRole("heading", {
+				name: /Agent 运行看板|Agent run board/,
+			}),
+		).toBeInTheDocument();
+		for (const statusName of ["运行中", "等待用户", "已完成", "异常"]) {
+			expect(
+				screen.getByRole("heading", { name: statusName }),
+			).toBeInTheDocument();
+		}
+
+		window.history.pushState({}, "", "/unsupported");
+		window.dispatchEvent(new PopStateEvent("popstate"));
+
+		await waitFor(() => expect(window.location.pathname).toBe("/"));
+	});
+
 	// Verifies that the running process state refreshes without reloading the UI.
 	it("refreshes the selected agent process state", async () => {
 		let processProbeCount = 0;
@@ -115,6 +193,91 @@ describe("App", () => {
 			await screen.findByText("Codex：运行中", {}, { timeout: 1500 }),
 		).toBeInTheDocument();
 		expect(processProbeCount).toBeGreaterThanOrEqual(2);
+	});
+
+	// Verifies that an unchanged process snapshot does not commit another render.
+	it("ignores unchanged process snapshots", async () => {
+		let processProbeCount = 0;
+		let renderCommitCount = 0;
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				processProbeCount += 1;
+				return Promise.resolve({
+					claude: false,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			return Promise.resolve({
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "ChatGPT",
+				model: "gpt-5.6-sol",
+				reasoningEffort: "high",
+			});
+		});
+
+		render(
+			<Profiler id="comparison" onRender={() => renderCommitCount++}>
+				<App />
+			</Profiler>,
+		);
+		expect(
+			await screen.findByText("Codex：已就绪，未运行"),
+		).toBeInTheDocument();
+		await waitFor(() => expect(processProbeCount).toBeGreaterThanOrEqual(1));
+		await new Promise((resolve) => window.setTimeout(resolve, 50));
+		const settledRenderCommitCount = renderCommitCount;
+
+		await waitFor(() => expect(processProbeCount).toBeGreaterThanOrEqual(2), {
+			timeout: 1500,
+		});
+
+		expect(renderCommitCount).toBe(settledRenderCommitCount);
+	});
+
+	// Verifies that unchanged authentication results keep the current UI state object.
+	it("ignores unchanged authentication snapshots", async () => {
+		let loginProbeCount = 0;
+		let processProbeCount = 0;
+		let renderCommitCount = 0;
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				processProbeCount += 1;
+				return Promise.resolve({
+					claude: false,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			loginProbeCount += 1;
+			return Promise.resolve({
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "ChatGPT",
+				model: "gpt-5.6-sol",
+				reasoningEffort: "high",
+			});
+		});
+
+		render(
+			<Profiler id="comparison" onRender={() => renderCommitCount++}>
+				<App />
+			</Profiler>,
+		);
+		expect(
+			await screen.findByText("Codex：已就绪，未运行"),
+		).toBeInTheDocument();
+		await waitFor(() => expect(loginProbeCount).toBeGreaterThanOrEqual(3));
+		await waitFor(() => expect(processProbeCount).toBeGreaterThanOrEqual(1));
+		await new Promise((resolve) => window.setTimeout(resolve, 50));
+		const settledRenderCommitCount = renderCommitCount;
+
+		window.dispatchEvent(new Event("focus"));
+		await waitFor(() => expect(loginProbeCount).toBeGreaterThanOrEqual(6));
+		await waitFor(() => expect(processProbeCount).toBeGreaterThanOrEqual(2));
+
+		expect(renderCommitCount).toBe(settledRenderCommitCount);
 	});
 
 	// Verifies that authentication changes refresh while the UI remains open.
@@ -148,6 +311,107 @@ describe("App", () => {
 		expect(
 			await screen.findByText("Codex：已就绪，未运行"),
 		).toBeInTheDocument();
+	});
+
+	// Verifies that a native Codex configuration event refreshes model defaults immediately.
+	it("refreshes Codex runtime defaults after its configuration changes", async () => {
+		let codexModel = "gpt-5.6-sol";
+		let codexProbeCount = 0;
+		let finishPendingProbe = () => {};
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				return Promise.resolve({
+					claude: false,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			const status = {
+				installed: true,
+				loggedIn: true,
+				authenticationMethod: "ChatGPT",
+				model: command === "check_codex_login" ? codexModel : null,
+				reasoningEffort: command === "check_codex_login" ? "high" : null,
+			};
+			if (command !== "check_codex_login") {
+				return Promise.resolve(status);
+			}
+
+			codexProbeCount += 1;
+			if (codexProbeCount !== 2) {
+				return Promise.resolve(status);
+			}
+
+			return new Promise((resolve) => {
+				finishPendingProbe = () => resolve(status);
+			});
+		});
+
+		render(<App />);
+		expect(await screen.findByText("gpt-5.6-sol")).toBeInTheDocument();
+
+		codexModel = "gpt-5.6-terra";
+		const listener = tauriEventListeners.get("codex-config-changed");
+		expect(listener).toBeTypeOf("function");
+		listener?.({ payload: null });
+		await waitFor(() => expect(codexProbeCount).toBe(2));
+
+		codexModel = "gpt-5.6-luna";
+		listener?.({ payload: null });
+		finishPendingProbe();
+
+		expect(await screen.findByText("gpt-5.6-luna")).toBeInTheDocument();
+		expect(codexProbeCount).toBe(3);
+	});
+
+	// Verifies that authentication probe processes do not masquerade as active Agent runs.
+	it("keeps the idle status while authentication probes are running", async () => {
+		let claudeLoginProbeCount = 0;
+		let isClaudeLoginProbeRunning = false;
+		let finishClaudeLoginProbe = () => {};
+		const readyStatus = {
+			installed: true,
+			loggedIn: true,
+			authenticationMethod: "Claude account",
+			model: null,
+			reasoningEffort: null,
+		};
+		invokeMock.mockImplementation((command: string) => {
+			if (command === "check_agent_processes") {
+				return Promise.resolve({
+					claude: isClaudeLoginProbeRunning,
+					codex: false,
+					workbuddy: false,
+				});
+			}
+			if (command === "check_claude_login") {
+				claudeLoginProbeCount += 1;
+				if (claudeLoginProbeCount === 1) {
+					return Promise.resolve(readyStatus);
+				}
+
+				isClaudeLoginProbeRunning = true;
+				return new Promise((resolve) => {
+					finishClaudeLoginProbe = () => {
+						isClaudeLoginProbeRunning = false;
+						resolve(readyStatus);
+					};
+				});
+			}
+			return Promise.resolve(readyStatus);
+		});
+
+		render(<App />);
+		expect(
+			await screen.findByText("Claude Code：已就绪，未运行"),
+		).toBeInTheDocument();
+
+		window.dispatchEvent(new Event("focus"));
+		await waitFor(() => expect(isClaudeLoginProbeRunning).toBe(true));
+		await new Promise((resolve) => window.setTimeout(resolve, 1100));
+
+		expect(screen.queryByText("Claude Code：运行中")).not.toBeInTheDocument();
+		finishClaudeLoginProbe();
 	});
 
 	// Verifies that one query runs across all selected products for comparison.
@@ -273,6 +537,12 @@ describe("App", () => {
 		expect(
 			within(workbuddyResult).getByText("WorkBuddy 完成"),
 		).toBeInTheDocument();
+		for (const agentName of ["Codex", "Claude Code", "WorkBuddy"]) {
+			expect(
+				screen.getByText(`只回复任务完成 任务 ${agentName} 已结束`),
+			).toBeInTheDocument();
+		}
+		expect(screen.getAllByText("请查看结果")).toHaveLength(3);
 	});
 
 	// Verifies that deselected products are excluded from a comparison run.
@@ -368,5 +638,7 @@ describe("App", () => {
 			within(codexResult).getByText("Codex benchmark failed"),
 		).toBeInTheDocument();
 		expect(screen.getAllByText("成功结果")).toHaveLength(2);
+		expect(screen.getByText("执行对比 任务 Codex 已结束")).toBeInTheDocument();
+		expect(screen.getAllByText("请查看结果")).toHaveLength(3);
 	});
 });

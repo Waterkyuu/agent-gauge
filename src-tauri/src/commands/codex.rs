@@ -1,4 +1,4 @@
-use crate::adapters::codex::SystemCodexAdapter;
+use crate::adapters::codex::{CodexRuntimeDefaultsCache, SystemCodexAdapter};
 use crate::domain::codex_run::{AgentRunMetrics, AgentRunOutput, TokenUsage};
 use crate::dto::codex::CodexLoginStatus;
 use crate::error::{AppError, IpcError};
@@ -82,8 +82,11 @@ fn duration_millis(duration: std::time::Duration) -> u64 {
 
 /// Checks whether a locally installed Codex CLI currently has active credentials.
 #[tauri::command]
-pub async fn check_codex_login() -> Result<CodexLoginStatus, IpcError> {
-    tauri::async_runtime::spawn_blocking(|| resolve_codex_login(&SystemCodexAdapter))
+pub async fn check_codex_login(
+    runtime_defaults_cache: tauri::State<'_, CodexRuntimeDefaultsCache>,
+) -> Result<CodexLoginStatus, IpcError> {
+    let adapter = SystemCodexAdapter::new(runtime_defaults_cache.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || resolve_codex_login(&adapter))
         .await
         .map_err(|_| IpcError::from(AppError::WorkerFailed))?
         .map_err(Into::into)
@@ -93,12 +96,12 @@ pub async fn check_codex_login() -> Result<CodexLoginStatus, IpcError> {
 #[tauri::command]
 pub async fn run_codex_task(
     request: RunCodexTaskRequest,
+    runtime_defaults_cache: tauri::State<'_, CodexRuntimeDefaultsCache>,
 ) -> Result<RunCodexTaskResponse, IpcError> {
-    tauri::async_runtime::spawn_blocking(move || {
-        run_agent_task(&SystemCodexAdapter, &request.query)
-    })
-    .await
-    .map_err(|_| IpcError::from(AppError::WorkerFailed))?
-    .map(Into::into)
-    .map_err(Into::into)
+    let adapter = SystemCodexAdapter::new(runtime_defaults_cache.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || run_agent_task(&adapter, &request.query))
+        .await
+        .map_err(|_| IpcError::from(AppError::WorkerFailed))?
+        .map(Into::into)
+        .map_err(Into::into)
 }

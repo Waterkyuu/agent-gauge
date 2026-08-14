@@ -1,9 +1,12 @@
 use crate::adapters::agent::AgentAdapter;
 use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
+use leveldb_forensic::{decode_local_storage, LocalStorageRecord};
 use serde::Deserialize;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::thread;
@@ -13,6 +16,123 @@ const WORKBUDDY_RUN_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const WORKBUDDY_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_EVENT_BYTES: u64 = 1024 * 1024;
 const EVENT_QUEUE_CAPACITY: usize = 64;
+const WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX: &str = "cb-newtask:model";
+const MAX_WORKBUDDY_LOCAL_STORAGE_BYTES: u64 = 16 * 1024 * 1024;
+const ACP_AUTH_REQUIRED_CODE: i64 = -32000;
+const JSON_RPC_METHOD_NOT_FOUND_CODE: i64 = -32601;
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkBuddyGlobalSelection {
+    id: String,
+    is_thinking: bool,
+    reasoning_effort: Option<String>,
+}
+
+impl WorkBuddyGlobalSelection {
+    fn thought_level(&self) -> &str {
+        if !self.is_thinking {
+            return "disabled";
+        }
+
+        self.reasoning_effort.as_deref().unwrap_or("enabled")
+    }
+}
+
+fn global_selection_from_local_storage(
+    records: &[LocalStorageRecord],
+) -> Option<WorkBuddyGlobalSelection> {
+    let (_, value) = records
+        .iter()
+        .filter_map(|record| match record {
+            LocalStorageRecord::Data {
+                origin,
+                script_key,
+                value,
+                seq,
+                deleted,
+            } if !deleted
+                && origin == "file://"
+                && !script_key.lossy
+                && !value.lossy
+                && (script_key.text == WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX
+                    || script_key
+                        .text
+                        .strip_prefix(WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX)
+                        .is_some_and(|suffix| suffix.starts_with(':'))) =>
+            {
+                Some((*seq, value.text.as_str()))
+            }
+            _ => None,
+        })
+        .max_by_key(|(seq, _)| *seq)?;
+
+    serde_json::from_str(value).ok()
+}
+
+fn workbuddy_local_storage_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| {
+        home.join(".workbuddy-ai")
+            .join("app")
+            .join("session")
+            .join("Local Storage")
+            .join("leveldb")
+    })
+}
+
+fn is_bounded_workbuddy_local_storage(path: &Path) -> bool {
+    if !fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir()) {
+        return false;
+    }
+    let Ok(entries) = fs::read_dir(path) else {
+        return false;
+    };
+    let mut total_bytes = 0_u64;
+
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        let Ok(file_type) = entry.file_type() else {
+            return false;
+        };
+        if file_type.is_symlink() {
+            return false;
+        }
+        if !file_type.is_file()
+            || !entry
+                .path()
+                .extension()
+                .and_then(OsStr::to_str)
+                .is_some_and(|extension| {
+                    extension.eq_ignore_ascii_case("ldb")
+                        || extension.eq_ignore_ascii_case("sst")
+                        || extension.eq_ignore_ascii_case("log")
+                })
+        {
+            continue;
+        }
+        let Ok(metadata) = entry.metadata() else {
+            return false;
+        };
+        total_bytes = total_bytes.saturating_add(metadata.len());
+        if total_bytes > MAX_WORKBUDDY_LOCAL_STORAGE_BYTES {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn read_workbuddy_global_selection() -> Option<WorkBuddyGlobalSelection> {
+    let path = workbuddy_local_storage_path()?;
+    if !is_bounded_workbuddy_local_storage(&path) {
+        return None;
+    }
+    let records = decode_local_storage(&path).ok()?;
+
+    global_selection_from_local_storage(&records)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkBuddyAuthentication {
@@ -31,6 +151,10 @@ pub(crate) trait WorkBuddyAdapter {
 pub(crate) struct SystemWorkBuddyAdapter;
 
 impl WorkBuddyAdapter for SystemWorkBuddyAdapter {
+    /// Detects WorkBuddy and opens a temporary ACP session to verify account access.
+    ///
+    /// WorkBuddy does not expose a separate authentication-status command; successful session
+    /// creation is therefore the authoritative local login signal.
     fn check_authentication(&self) -> Result<WorkBuddyAuthentication, AppError> {
         let executable = match resolve_workbuddy_executable() {
             Ok(executable) => executable,
@@ -72,7 +196,15 @@ struct StreamMessage {
 struct StreamEvent {
     #[serde(rename = "type")]
     event_type: String,
+    content_block: Option<StreamContentBlock>,
     delta: Option<StreamDelta>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamContentBlock {
+    #[serde(rename = "type")]
+    block_type: String,
+    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,12 +237,29 @@ struct AcpResult {
     session_id: Option<String>,
     models: Option<AcpModels>,
     config_options: Option<Vec<AcpConfigOption>>,
+    user_info: Option<AcpUserInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpUserInfo {
+    user_id: String,
+    auth_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpModels {
+    #[serde(default)]
+    available_models: Vec<AcpModel>,
     current_model_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpModel {
+    model_id: String,
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,7 +270,9 @@ struct AcpConfigOption {
 }
 
 #[derive(Debug, Deserialize)]
-struct AcpError {}
+struct AcpError {
+    code: i64,
+}
 
 impl From<StreamUsage> for TokenUsage {
     fn from(usage: StreamUsage) -> Self {
@@ -157,21 +308,8 @@ fn resolve_workbuddy_executable() -> Result<OsString, AppError> {
 
 fn run_workbuddy_task(executable: &OsStr, query: &str) -> Result<AgentRunOutput, AppError> {
     let started_at = Instant::now();
-    let mut child = Command::new(executable)
-        .args([
-            "--print",
-            query,
-            "--output-format",
-            "stream-json",
-            "--include-partial-messages",
-            "--verbose",
-            "--permission-mode",
-            "acceptEdits",
-            "--no-session-persistence",
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+    let global_selection = read_workbuddy_global_selection();
+    let mut child = build_workbuddy_task_command(executable, query, global_selection.as_ref())
         .spawn()
         .map_err(|_| AppError::WorkBuddyProtocolFailed)?;
     let stdout = match child.stdout.take() {
@@ -202,6 +340,43 @@ fn run_workbuddy_task(executable: &OsStr, query: &str) -> Result<AgentRunOutput,
     result
 }
 
+fn build_workbuddy_task_command(
+    executable: &OsStr,
+    query: &str,
+    global_selection: Option<&WorkBuddyGlobalSelection>,
+) -> Command {
+    let mut command = Command::new(executable);
+    if let Some(selection) = global_selection {
+        command.args(["--model", selection.id.as_str()]);
+        if selection.is_thinking {
+            if let Some(effort) = selection.reasoning_effort.as_deref().filter(|effort| {
+                matches!(
+                    *effort,
+                    "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+                )
+            }) {
+                command.args(["--effort", effort]);
+            }
+        }
+    }
+    command
+        .args([
+            "--print",
+            query,
+            "--output-format",
+            "stream-json",
+            "--include-partial-messages",
+            "--verbose",
+            "--permission-mode",
+            "acceptEdits",
+            "--no-session-persistence",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    command
+}
+
 fn collect_workbuddy_events(
     event_receiver: &Receiver<Result<String, AppError>>,
     started_at: Instant,
@@ -218,6 +393,18 @@ fn collect_workbuddy_events(
             serde_json::from_str(&line).map_err(|_| AppError::WorkBuddyProtocolFailed)?;
 
         if message.message_type == "stream_event" {
+            if message
+                .event
+                .as_ref()
+                .filter(|event| event.event_type == "content_block_start")
+                .and_then(|event| event.content_block.as_ref())
+                .is_some_and(|block| {
+                    block.block_type == "tool_use"
+                        && block.name.as_deref() == Some("AskUserQuestion")
+                })
+            {
+                return Err(AppError::WorkBuddyNeedsInput);
+            }
             if let Some(delta) = message
                 .event
                 .filter(|event| event.event_type == "content_block_delta")
@@ -300,6 +487,7 @@ fn read_stream_events(stdout: impl io::Read, event_sender: SyncSender<Result<Str
 }
 
 fn workbuddy_executable_candidates() -> Vec<OsString> {
+    // The product has shipped under both CLI names, and the desktop bundle may not modify PATH.
     let mut candidates = vec![OsString::from("codebuddy"), OsString::from("cbc")];
 
     #[cfg(target_os = "macos")]
@@ -310,6 +498,10 @@ fn workbuddy_executable_candidates() -> Vec<OsString> {
     candidates
 }
 
+/// Runs the minimum ACP exchange needed to determine whether WorkBuddy can create a session.
+///
+/// The probe owns this child process and terminates it after receiving the authentication result;
+/// leaving it alive would make the separate process monitor report a false running state.
 fn probe_workbuddy_runtime(executable: &OsStr) -> Result<WorkBuddyAuthentication, AppError> {
     let mut child = Command::new(executable)
         .arg("--acp")
@@ -343,6 +535,7 @@ fn probe_workbuddy_runtime(executable: &OsStr) -> Result<WorkBuddyAuthentication
     probe_result
 }
 
+/// Initializes ACP, requests a disposable session, and normalizes its runtime configuration.
 fn initialize_acp_session(
     stdin: &mut ChildStdin,
     event_receiver: &Receiver<Result<String, AppError>>,
@@ -351,47 +544,124 @@ fn initialize_acp_session(
         stdin,
         r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"agent-gauge","version":"0.1.0"}}}"#,
     )?;
-    wait_for_acp_response(event_receiver, 0)?;
+    let initialize_response = wait_for_acp_response(event_receiver, 0)?;
+    if initialize_response.error.is_some() {
+        return Err(AppError::WorkBuddyProbeFailed);
+    }
+    // CodeBuddy's read-only extension reports the current account without creating a session.
+    write_acp_message(
+        stdin,
+        r#"{"jsonrpc":"2.0","id":1,"method":"_codebuddy.ai/getUserInfo","params":{}}"#,
+    )?;
+    let user_info_response = wait_for_acp_response(event_receiver, 1)?;
+    let global_selection = read_workbuddy_global_selection();
+    if let Some(authentication) =
+        authentication_from_user_info_response(user_info_response, global_selection.as_ref())?
+    {
+        return Ok(authentication);
+    }
+
+    // Older CodeBuddy releases may not expose getUserInfo. In that case only, create a
+    // disposable session as a compatibility probe and read its effective configuration.
     let cwd = std::env::current_dir().map_err(|_| AppError::WorkBuddyProbeFailed)?;
     let session_request = serde_json::json!({
         "jsonrpc": "2.0",
-        "id": 1,
+        "id": 2,
         "method": "session/new",
         "params": {"cwd": cwd, "mcpServers": []}
     });
     write_acp_message(stdin, &session_request.to_string())?;
-    let response = wait_for_acp_response(event_receiver, 1)?;
+    let response = wait_for_acp_response(event_receiver, 2)?;
 
-    authentication_from_acp_response(response)
+    authentication_from_acp_response(response, global_selection.as_ref())
+}
+
+/// Converts CodeBuddy's read-only account response; `None` requests the legacy session fallback.
+fn authentication_from_user_info_response(
+    response: AcpMessage,
+    global_selection: Option<&WorkBuddyGlobalSelection>,
+) -> Result<Option<WorkBuddyAuthentication>, AppError> {
+    if let Some(error) = response.error {
+        return if error.code == JSON_RPC_METHOD_NOT_FOUND_CODE {
+            Ok(None)
+        } else {
+            Err(AppError::WorkBuddyProbeFailed)
+        };
+    }
+
+    let user_info = response
+        .result
+        .ok_or(AppError::WorkBuddyProbeFailed)?
+        .user_info;
+    let logged_in = user_info
+        .as_ref()
+        .is_some_and(|user| !user.user_id.trim().is_empty());
+    let authentication_method = user_info
+        .and_then(|user| user.auth_type)
+        .filter(|auth_type| !auth_type.trim().is_empty())
+        .or_else(|| logged_in.then(|| "WorkBuddy account".to_string()));
+    let model = logged_in
+        .then(|| global_selection.map(|selection| selection.id.clone()))
+        .flatten();
+    let reasoning_effort = logged_in
+        .then(|| global_selection.map(|selection| selection.thought_level().to_string()))
+        .flatten();
+
+    Ok(Some(WorkBuddyAuthentication {
+        installed: true,
+        logged_in,
+        authentication_method,
+        model,
+        reasoning_effort,
+    }))
 }
 
 fn authentication_from_acp_response(
     response: AcpMessage,
+    global_selection: Option<&WorkBuddyGlobalSelection>,
 ) -> Result<WorkBuddyAuthentication, AppError> {
-    if response.error.is_some() {
-        return Ok(WorkBuddyAuthentication {
-            installed: true,
-            logged_in: false,
-            authentication_method: None,
-            model: None,
-            reasoning_effort: None,
-        });
+    if let Some(error) = response.error {
+        if error.code == ACP_AUTH_REQUIRED_CODE {
+            return Ok(WorkBuddyAuthentication {
+                installed: true,
+                logged_in: false,
+                authentication_method: None,
+                model: None,
+                reasoning_effort: None,
+            });
+        }
+        return Err(AppError::WorkBuddyProbeFailed);
     }
 
     let result = response.result.ok_or(AppError::WorkBuddyProbeFailed)?;
+    // ACP returns a session identifier only after the local runtime accepts the active account.
     let logged_in = result.session_id.is_some();
-    let reasoning_effort = result.config_options.and_then(|options| {
-        options
+    let model = result.models.map(|models| {
+        let model_id = global_selection
+            .map(|selection| selection.id.as_str())
+            .unwrap_or(&models.current_model_id);
+        models
+            .available_models
             .into_iter()
-            .find(|option| option.id == "thought_level")
-            .map(|option| option.current_value)
+            .find(|model| model.model_id == model_id)
+            .map_or_else(|| model_id.to_string(), |model| model.name)
     });
+    let reasoning_effort = global_selection
+        .map(|selection| selection.thought_level().to_string())
+        .or_else(|| {
+            result.config_options.and_then(|options| {
+                options
+                    .into_iter()
+                    .find(|option| option.id == "thought_level")
+                    .map(|option| option.current_value)
+            })
+        });
 
     Ok(WorkBuddyAuthentication {
         installed: true,
         logged_in,
         authentication_method: logged_in.then(|| "WorkBuddy account".to_string()),
-        model: result.models.map(|models| models.current_model_id),
+        model,
         reasoning_effort,
     })
 }
@@ -439,9 +709,12 @@ fn terminate_child(child: &mut Child) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        authentication_from_acp_response, collect_workbuddy_events, AcpMessage, StreamUsage,
+        authentication_from_acp_response, authentication_from_user_info_response,
+        build_workbuddy_task_command, collect_workbuddy_events,
+        global_selection_from_local_storage, AcpMessage, StreamUsage,
     };
     use crate::domain::codex_run::TokenUsage;
+    use leveldb_forensic::{Encoding, LocalStorageRecord, StorageValue};
     use std::sync::mpsc;
     use std::time::Instant;
 
@@ -489,18 +762,215 @@ mod tests {
     }
 
     #[test]
-    fn reads_model_and_thought_level_from_the_acp_session() {
+    fn reads_model_name_and_thought_level_from_the_acp_session() {
         let response: AcpMessage = serde_json::from_str(
-            r#"{"id":1,"result":{"sessionId":"session-1","models":{"currentModelId":"fast-model"},"configOptions":[{"id":"thought_level","currentValue":"enabled"}]}}"#,
+            r#"{"id":1,"result":{"sessionId":"session-1","models":{"availableModels":[{"modelId":"fast-model","name":"Fast"},{"modelId":"kimi-k3","name":"Kimi-K3"}],"currentModelId":"kimi-k3"},"configOptions":[{"id":"thought_level","currentValue":"enabled"}]}}"#,
         )
         .expect("fixture should deserialize");
 
-        let authentication = authentication_from_acp_response(response)
+        let authentication = authentication_from_acp_response(response, None)
             .expect("valid session should produce authentication state");
 
         assert!(authentication.installed);
         assert!(authentication.logged_in);
-        assert_eq!(authentication.model.as_deref(), Some("fast-model"));
+        assert_eq!(authentication.model.as_deref(), Some("Kimi-K3"));
         assert_eq!(authentication.reasoning_effort.as_deref(), Some("enabled"));
+    }
+
+    #[test]
+    fn reads_login_state_without_creating_an_acp_session() {
+        let response: AcpMessage = serde_json::from_str(
+            r#"{"id":1,"result":{"userInfo":{"userId":"user-1","authType":"external"}}}"#,
+        )
+        .expect("fixture should deserialize");
+        let global_selection = super::WorkBuddyGlobalSelection {
+            id: "kimi-k3".to_string(),
+            is_thinking: true,
+            reasoning_effort: Some("high".to_string()),
+        };
+
+        let authentication =
+            authentication_from_user_info_response(response, Some(&global_selection))
+                .expect("valid user info should produce authentication state")
+                .expect("supported user info method should not request a session fallback");
+
+        assert!(authentication.logged_in);
+        assert_eq!(
+            authentication.authentication_method.as_deref(),
+            Some("external")
+        );
+        assert_eq!(authentication.model.as_deref(), Some("kimi-k3"));
+        assert_eq!(authentication.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn reports_logged_out_when_acp_has_no_current_user() {
+        let response: AcpMessage =
+            serde_json::from_str(r#"{"id":1,"result":{}}"#).expect("fixture should deserialize");
+
+        let authentication = authentication_from_user_info_response(response, None)
+            .expect("empty user info should be a valid logged-out state")
+            .expect("supported user info method should not request a session fallback");
+
+        assert!(!authentication.logged_in);
+        assert_eq!(authentication.authentication_method, None);
+    }
+
+    #[test]
+    fn requests_session_fallback_when_user_info_method_is_unsupported() {
+        let response: AcpMessage = serde_json::from_str(
+            r#"{"id":1,"error":{"code":-32601,"message":"Method not found"}}"#,
+        )
+        .expect("fixture should deserialize");
+
+        let authentication = authentication_from_user_info_response(response, None)
+            .expect("method-not-found should select the compatibility fallback");
+
+        assert_eq!(authentication, None);
+    }
+
+    #[test]
+    fn preserves_non_authentication_acp_probe_failures() {
+        let response: AcpMessage =
+            serde_json::from_str(r#"{"id":1,"error":{"code":-32002,"message":"Internal error"}}"#)
+                .expect("fixture should deserialize");
+
+        let result = authentication_from_user_info_response(response, None);
+
+        assert_eq!(result, Err(crate::error::AppError::WorkBuddyProbeFailed));
+    }
+
+    #[test]
+    fn global_selection_overrides_new_acp_session_defaults() {
+        let response: AcpMessage = serde_json::from_str(
+            r#"{"id":1,"result":{"sessionId":"session-1","models":{"availableModels":[{"modelId":"fast-model","name":"Fast"},{"modelId":"kimi-k3","name":"Kimi-K3"}],"currentModelId":"fast-model"},"configOptions":[{"id":"thought_level","currentValue":"enabled"}]}}"#,
+        )
+        .expect("fixture should deserialize");
+        let global_selection = super::WorkBuddyGlobalSelection {
+            id: "kimi-k3".to_string(),
+            is_thinking: true,
+            reasoning_effort: None,
+        };
+
+        let authentication = authentication_from_acp_response(response, Some(&global_selection))
+            .expect("valid session should produce authentication state");
+
+        assert_eq!(authentication.model.as_deref(), Some("Kimi-K3"));
+        assert_eq!(authentication.reasoning_effort.as_deref(), Some("enabled"));
+    }
+
+    #[test]
+    fn task_command_uses_global_model_and_keeps_default_reasoning() {
+        let selection = super::WorkBuddyGlobalSelection {
+            id: "kimi-k3".to_string(),
+            is_thinking: true,
+            reasoning_effort: None,
+        };
+
+        let command =
+            build_workbuddy_task_command("codebuddy".as_ref(), "test prompt", Some(&selection));
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(args.windows(2).any(|args| args == ["--model", "kimi-k3"]));
+        assert!(!args.iter().any(|arg| arg == "--effort"));
+    }
+
+    #[test]
+    fn task_command_uses_explicit_global_reasoning() {
+        let selection = super::WorkBuddyGlobalSelection {
+            id: "kimi-k3".to_string(),
+            is_thinking: true,
+            reasoning_effort: Some("high".to_string()),
+        };
+
+        let command =
+            build_workbuddy_task_command("codebuddy".as_ref(), "test prompt", Some(&selection));
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(args.windows(2).any(|args| args == ["--effort", "high"]));
+    }
+
+    #[test]
+    fn reads_latest_global_model_with_default_reasoning() {
+        let records = vec![
+            LocalStorageRecord::Data {
+                origin: "file://".to_string(),
+                script_key: StorageValue {
+                    text: "cb-newtask:model:user-1".to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                value: StorageValue {
+                    text: r#"{"id":"fast-model","isThinking":true}"#.to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                seq: 4,
+                deleted: false,
+            },
+            LocalStorageRecord::Data {
+                origin: "file://".to_string(),
+                script_key: StorageValue {
+                    text: "cb-newtask:model:user-1".to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                value: StorageValue {
+                    text: r#"{"id":"kimi-k3","isThinking":true}"#.to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                seq: 9,
+                deleted: false,
+            },
+            LocalStorageRecord::Data {
+                origin: "file://".to_string(),
+                script_key: StorageValue {
+                    text: "cb-newtask:model:user-1".to_string(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                value: StorageValue {
+                    text: String::new(),
+                    raw: Vec::new(),
+                    encoding: Encoding::Latin1,
+                    lossy: false,
+                },
+                seq: 10,
+                deleted: true,
+            },
+        ];
+
+        let selection = global_selection_from_local_storage(&records)
+            .expect("latest global selection should be parsed");
+
+        assert_eq!(selection.id, "kimi-k3");
+        assert!(selection.is_thinking);
+        assert_eq!(selection.reasoning_effort, None);
+        assert_eq!(selection.thought_level(), "enabled");
+    }
+
+    #[test]
+    fn reports_when_workbuddy_asks_the_user_a_question() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        sender
+            .send(Ok(r#"{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"tool_use","name":"AskUserQuestion"}}}"#.to_string()))
+            .expect("fixture should be queued");
+        drop(sender);
+
+        let result = collect_workbuddy_events(&receiver, Instant::now());
+
+        assert_eq!(result, Err(crate::error::AppError::WorkBuddyNeedsInput));
     }
 }

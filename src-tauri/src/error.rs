@@ -5,16 +5,19 @@ pub(crate) enum AppError {
     ClaudeNotInstalled,
     ClaudeProbeFailed,
     ClaudeProtocolFailed,
+    ClaudeNeedsInput,
     ClaudeTaskFailed,
     ClaudeTimedOut,
     CodexProbeFailed,
     CodexProtocolFailed,
+    CodexNeedsInput,
     CodexTaskFailed,
     CodexTimedOut,
     ProcessProbeFailed,
     WorkBuddyNotInstalled,
     WorkBuddyProbeFailed,
     WorkBuddyProtocolFailed,
+    WorkBuddyNeedsInput,
     WorkBuddyTaskFailed,
     WorkBuddyTimedOut,
     InvalidQuery,
@@ -46,6 +49,10 @@ impl From<AppError> for IpcError {
                 code: "CLAUDE_PROTOCOL_FAILED",
                 message: "无法读取本地 Claude Code 事件流。",
             },
+            AppError::ClaudeNeedsInput => Self {
+                code: "CLAUDE_NEEDS_INPUT",
+                message: "Claude Code 正在等待用户回答。",
+            },
             AppError::ClaudeTaskFailed => Self {
                 code: "CLAUDE_TASK_FAILED",
                 message: "Claude Code 未能完成任务。",
@@ -61,6 +68,10 @@ impl From<AppError> for IpcError {
             AppError::CodexProtocolFailed => Self {
                 code: "CODEX_PROTOCOL_FAILED",
                 message: "无法读取本地 Codex 事件流。",
+            },
+            AppError::CodexNeedsInput => Self {
+                code: "CODEX_NEEDS_INPUT",
+                message: "Codex 正在等待用户回答。",
             },
             AppError::CodexTaskFailed => Self {
                 code: "CODEX_TASK_FAILED",
@@ -85,6 +96,10 @@ impl From<AppError> for IpcError {
             AppError::WorkBuddyProtocolFailed => Self {
                 code: "WORKBUDDY_PROTOCOL_FAILED",
                 message: "无法读取本地 WorkBuddy 事件流。",
+            },
+            AppError::WorkBuddyNeedsInput => Self {
+                code: "WORKBUDDY_NEEDS_INPUT",
+                message: "WorkBuddy 正在等待用户回答。",
             },
             AppError::WorkBuddyTaskFailed => Self {
                 code: "WORKBUDDY_TASK_FAILED",

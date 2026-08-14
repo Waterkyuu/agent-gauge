@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AgentRunResult, AgentRuntimeStatus } from "../types/agent";
+import type { AgentRunResult, AgentRuntimeStatus } from "@/types/agent";
 
 /** Checks the local WorkBuddy account state through the Tauri backend. */
 const checkWorkBuddyLogin = () =>

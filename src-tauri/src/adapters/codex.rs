@@ -1,18 +1,27 @@
 use crate::adapters::agent::AgentAdapter;
 use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
+use crate::platform::codex_config::codex_config_paths;
 use serde::Deserialize;
 use std::ffi::{OsStr, OsString};
+use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc, Mutex, MutexGuard,
+};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const APP_SERVER_START_TIMEOUT: Duration = Duration::from_secs(30);
 const CODEX_RUN_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const MAX_EVENT_BYTES: u64 = 1024 * 1024;
+const MAX_CODEX_CONFIG_BYTES: u64 = 1024 * 1024;
 const EVENT_QUEUE_CAPACITY: usize = 64;
+const MAX_RUNTIME_DEFAULT_RESOLUTION_ATTEMPTS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexAuthentication {
@@ -27,10 +36,24 @@ pub(crate) trait CodexAdapter {
     fn check_authentication(&self) -> Result<CodexAuthentication, AppError>;
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct SystemCodexAdapter;
+#[derive(Debug, Clone)]
+pub(crate) struct SystemCodexAdapter {
+    runtime_defaults_cache: CodexRuntimeDefaultsCache,
+}
+
+impl SystemCodexAdapter {
+    pub(crate) fn new(runtime_defaults_cache: CodexRuntimeDefaultsCache) -> Self {
+        Self {
+            runtime_defaults_cache,
+        }
+    }
+}
 
 impl CodexAdapter for SystemCodexAdapter {
+    /// Detects a local Codex executable and asks the CLI whether it has active credentials.
+    ///
+    /// A non-zero `codex login status` result means the executable exists but is logged out.
+    /// Missing candidates are skipped so bundled macOS executables can be used as fallbacks.
     fn check_authentication(&self) -> Result<CodexAuthentication, AppError> {
         for executable in codex_executable_candidates() {
             let output = Command::new(&executable)
@@ -42,7 +65,13 @@ impl CodexAdapter for SystemCodexAdapter {
 
             match output {
                 Ok(output) => {
+                    // The official CLI contract states that `codex login status` exits with 0
+                    // when credentials are present and prints the active authentication mode:
+                    // https://learn.chatgpt.com/docs/developer-commands?surface=cli#cli-codex-login
                     let logged_in = output.status.success();
+                    // Current Codex versions print, for example, `Logged in using ChatGPT`.
+                    // Authentication-mode parsing is display-only; an unexpected format falls
+                    // back to a safe generic label without changing the exit-code login result.
                     let authentication_method = logged_in.then(|| {
                         String::from_utf8_lossy(&output.stdout)
                             .trim()
@@ -50,19 +79,27 @@ impl CodexAdapter for SystemCodexAdapter {
                             .unwrap_or("authenticated credentials")
                             .to_string()
                     });
-                    let runtime_defaults = logged_in
-                        .then(|| resolve_codex_runtime_defaults(&executable))
-                        .transpose()?;
+                    // Explicit config values are authoritative for this display. App Server remains
+                    // the fallback when either field cannot be resolved safely from local TOML.
+                    let runtime_settings = if logged_in {
+                        Some(
+                            self.runtime_defaults_cache
+                                .resolve(|| resolve_codex_runtime_settings(&executable))?,
+                        )
+                    } else {
+                        self.runtime_defaults_cache.invalidate();
+                        None
+                    };
 
                     return Ok(CodexAuthentication {
                         installed: true,
                         logged_in,
                         authentication_method,
-                        model: runtime_defaults
+                        model: runtime_settings
                             .as_ref()
-                            .map(|defaults| defaults.model.clone()),
-                        reasoning_effort: runtime_defaults
-                            .and_then(|defaults| defaults.reasoning_effort),
+                            .map(|settings| settings.model.clone()),
+                        reasoning_effort: runtime_settings
+                            .and_then(|settings| settings.reasoning_effort),
                     });
                 }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
@@ -70,6 +107,7 @@ impl CodexAdapter for SystemCodexAdapter {
             }
         }
 
+        self.runtime_defaults_cache.invalidate();
         Ok(CodexAuthentication {
             installed: false,
             logged_in: false,
@@ -125,6 +163,97 @@ struct CodexRuntimeDefaults {
     reasoning_effort: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexRuntimeSettings {
+    model: String,
+    reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct CodexConfigLayer {
+    model: Option<String>,
+    model_reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedCodexRuntimeDefaults {
+    revision: u64,
+    value: CodexRuntimeSettings,
+}
+
+#[derive(Debug, Default)]
+struct CodexRuntimeDefaultsCacheState {
+    enabled: AtomicBool,
+    revision: AtomicU64,
+    value: Mutex<Option<CachedCodexRuntimeDefaults>>,
+}
+
+/// Shares the latest effective model defaults across authentication probes.
+///
+/// The cache is enabled only after the native configuration watcher starts successfully. When
+/// watching is unavailable, every probe resolves fresh defaults so the UI cannot become stale.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CodexRuntimeDefaultsCache {
+    state: Arc<CodexRuntimeDefaultsCacheState>,
+}
+
+impl CodexRuntimeDefaultsCache {
+    pub(crate) fn enable(&self) {
+        self.state.enabled.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn disable(&self) {
+        self.state.enabled.store(false, Ordering::Release);
+        self.invalidate();
+    }
+
+    pub(crate) fn invalidate(&self) {
+        self.state.revision.fetch_add(1, Ordering::AcqRel);
+        *self.lock_value() = None;
+    }
+
+    fn resolve(
+        &self,
+        mut resolver: impl FnMut() -> Result<CodexRuntimeSettings, AppError>,
+    ) -> Result<CodexRuntimeSettings, AppError> {
+        if !self.state.enabled.load(Ordering::Acquire) {
+            return resolver();
+        }
+
+        for _ in 0..MAX_RUNTIME_DEFAULT_RESOLUTION_ATTEMPTS {
+            let revision = self.state.revision.load(Ordering::Acquire);
+            if let Some(cached) = self
+                .lock_value()
+                .as_ref()
+                .filter(|cached| cached.revision == revision)
+            {
+                return Ok(cached.value.clone());
+            }
+
+            let resolved = resolver()?;
+            let mut cached_value = self.lock_value();
+            if self.state.revision.load(Ordering::Acquire) == revision {
+                *cached_value = Some(CachedCodexRuntimeDefaults {
+                    revision,
+                    value: resolved.clone(),
+                });
+                return Ok(resolved);
+            }
+        }
+
+        // Rapid consecutive writes can invalidate both bounded attempts. Return a fresh value
+        // without caching it; the next scheduled probe can establish a stable cached snapshot.
+        resolver()
+    }
+
+    fn lock_value(&self) -> MutexGuard<'_, Option<CachedCodexRuntimeDefaults>> {
+        match self.state.value.lock() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct AppServerTurn {
     status: String,
@@ -178,10 +307,82 @@ fn resolve_codex_executable() -> Result<OsString, AppError> {
     Err(AppError::CodexProbeFailed)
 }
 
+/// Resolves explicit TOML settings first and delegates incomplete state to Codex itself.
+fn resolve_codex_runtime_settings(executable: &OsStr) -> Result<CodexRuntimeSettings, AppError> {
+    if let Some(settings) = read_codex_runtime_settings() {
+        return Ok(settings);
+    }
+
+    resolve_codex_runtime_defaults(executable).map(|defaults| CodexRuntimeSettings {
+        model: defaults.model,
+        reasoning_effort: defaults.reasoning_effort,
+    })
+}
+
+/// Reads bounded configuration layers in precedence order without exposing unrelated settings.
+fn read_codex_runtime_settings() -> Option<CodexRuntimeSettings> {
+    let mut contents = Vec::new();
+
+    for path in codex_config_paths() {
+        match read_bounded_codex_config(&path) {
+            Ok(Some(content)) => contents.push(content),
+            Ok(None) => {}
+            Err(()) => return None,
+        }
+    }
+
+    runtime_settings_from_config_layers(contents.iter().map(String::as_str))
+}
+
+fn read_bounded_codex_config(path: &Path) -> Result<Option<String>, ()> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(()),
+    };
+    let mut bytes = Vec::new();
+    file.take(MAX_CODEX_CONFIG_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ())?;
+    if bytes.len() as u64 > MAX_CODEX_CONFIG_BYTES {
+        return Err(());
+    }
+
+    String::from_utf8(bytes).map(Some).map_err(|_| ())
+}
+
+fn runtime_settings_from_config_layers<'a>(
+    layers: impl IntoIterator<Item = &'a str>,
+) -> Option<CodexRuntimeSettings> {
+    let mut model = None;
+    let mut reasoning_effort = None;
+
+    for content in layers {
+        let layer: CodexConfigLayer = toml::from_str(content).ok()?;
+        if let Some(value) = non_empty_config_value(layer.model) {
+            model = Some(value);
+        }
+        if let Some(value) = non_empty_config_value(layer.model_reasoning_effort) {
+            reasoning_effort = Some(value);
+        }
+    }
+
+    Some(CodexRuntimeSettings {
+        model: model?,
+        reasoning_effort: Some(reasoning_effort?),
+    })
+}
+
+fn non_empty_config_value(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.trim().is_empty())
+}
+
+/// Starts an ephemeral App Server session to resolve the model defaults used by new Codex tasks.
 fn resolve_codex_runtime_defaults(executable: &OsStr) -> Result<CodexRuntimeDefaults, AppError> {
     with_app_server(executable, initialize_app_server_thread)
 }
 
+/// Runs one bounded App Server exchange and always terminates the child before returning.
 fn with_app_server<T>(
     executable: &OsStr,
     operation: impl FnOnce(&mut ChildStdin, &Receiver<Result<String, AppError>>) -> Result<T, AppError>,
@@ -286,6 +487,11 @@ fn collect_run_events(
             serde_json::from_str(&line).map_err(|_| AppError::CodexProtocolFailed)?;
 
         match message.method.as_deref() {
+            Some(
+                "tool/requestUserInput"
+                | "item/tool/requestUserInput"
+                | "mcpServer/elicitation/request",
+            ) => return Err(AppError::CodexNeedsInput),
             Some("item/agentMessage/delta") => {
                 if let Some(delta) = message.params.and_then(|params| params.delta) {
                     collector.record_agent_delta(&delta, started_at.elapsed());
@@ -408,12 +614,139 @@ fn terminate_child(child: &mut Child) -> Result<(), AppError> {
 }
 
 fn codex_executable_candidates() -> Vec<OsString> {
+    // GUI installations may bundle Codex without placing it on the desktop app's PATH.
     let mut candidates = vec![OsString::from("codex")];
 
     #[cfg(target_os = "macos")]
-    candidates.push(OsString::from(
-        "/Applications/Codex.app/Contents/Resources/codex",
-    ));
+    candidates.extend([
+        OsString::from("/Applications/Codex.app/Contents/Resources/codex"),
+        OsString::from("/Applications/ChatGPT.app/Contents/Resources/codex"),
+    ]);
 
     candidates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        codex_executable_candidates, collect_run_events, runtime_settings_from_config_layers,
+        CodexRuntimeDefaultsCache, CodexRuntimeSettings,
+    };
+    use crate::error::AppError;
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn discovers_codex_bundled_with_the_chatgpt_desktop_app() {
+        let candidates = codex_executable_candidates();
+
+        assert!(candidates.iter().any(|candidate| {
+            candidate == "/Applications/ChatGPT.app/Contents/Resources/codex"
+        }));
+    }
+
+    #[test]
+    fn reports_when_codex_requests_user_input() {
+        for method in [
+            "tool/requestUserInput",
+            "item/tool/requestUserInput",
+            "mcpServer/elicitation/request",
+        ] {
+            let (sender, receiver) = mpsc::sync_channel(1);
+            sender
+                .send(Ok(format!(
+                    r#"{{"method":"{method}","id":7,"params":{{}}}}"#
+                )))
+                .expect("fixture should be queued");
+            drop(sender);
+
+            let result = collect_run_events(&receiver, Instant::now());
+
+            assert_eq!(result, Err(AppError::CodexNeedsInput));
+        }
+    }
+
+    #[test]
+    fn reads_complete_runtime_settings_from_layered_codex_config() {
+        let settings = runtime_settings_from_config_layers([
+            r#"
+                model = "gpt-5.6-sol"
+                model_reasoning_effort = "medium"
+                [features]
+                js_repl = false
+            "#,
+            r#"model_reasoning_effort = "high""#,
+        ])
+        .expect("complete configuration should provide runtime settings");
+
+        assert_eq!(settings.model, "gpt-5.6-sol");
+        assert_eq!(settings.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn requires_app_server_fallback_for_incomplete_or_invalid_codex_config() {
+        assert_eq!(
+            runtime_settings_from_config_layers([r#"model = "gpt-5.6-sol""#]),
+            None
+        );
+        assert_eq!(
+            runtime_settings_from_config_layers(["model = [invalid"]),
+            None
+        );
+    }
+
+    #[test]
+    fn caches_runtime_defaults_until_the_configuration_is_invalidated() {
+        let cache = CodexRuntimeDefaultsCache::default();
+        cache.enable();
+        let mut resolution_count = 0;
+        let mut resolve = || {
+            resolution_count += 1;
+            Ok(CodexRuntimeSettings {
+                model: format!("model-{resolution_count}"),
+                reasoning_effort: Some("high".to_string()),
+            })
+        };
+
+        let first = cache
+            .resolve(&mut resolve)
+            .expect("initial runtime defaults should resolve");
+        let cached = cache
+            .resolve(&mut resolve)
+            .expect("runtime defaults should come from the cache");
+        cache.invalidate();
+        let refreshed = cache
+            .resolve(&mut resolve)
+            .expect("invalidated runtime defaults should resolve again");
+
+        assert_eq!(first.model, "model-1");
+        assert_eq!(cached.model, "model-1");
+        assert_eq!(refreshed.model, "model-2");
+        assert_eq!(resolution_count, 2);
+    }
+
+    #[test]
+    fn bypasses_the_cache_when_configuration_monitoring_is_unavailable() {
+        let cache = CodexRuntimeDefaultsCache::default();
+        let mut resolution_count = 0;
+        let mut resolve = || {
+            resolution_count += 1;
+            Ok(CodexRuntimeSettings {
+                model: format!("model-{resolution_count}"),
+                reasoning_effort: None,
+            })
+        };
+
+        let first = cache
+            .resolve(&mut resolve)
+            .expect("initial runtime defaults should resolve");
+        let second = cache
+            .resolve(&mut resolve)
+            .expect("uncached runtime defaults should resolve again");
+
+        assert_eq!(first.model, "model-1");
+        assert_eq!(second.model, "model-2");
+        assert_eq!(resolution_count, 2);
+    }
 }
