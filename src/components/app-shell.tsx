@@ -39,13 +39,13 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 	};
 
 	return (
-		<div className="min-h-[100dvh] bg-[var(--app-canvas)] text-[var(--app-ink)] lg:flex">
+		<div className="min-h-[100dvh] bg-canvas text-ink lg:flex">
 			<Button
 				aria-controls="desktop-sidebar"
 				aria-expanded={!isSidebarCollapsed}
 				aria-label={t(isSidebarCollapsed ? "expandSidebar" : "collapseSidebar")}
 				className={cn(
-					"fixed top-[6px] z-20 hidden rounded-md bg-transparent text-[var(--app-ink)] shadow-none motion-safe:transition-[left] motion-safe:duration-200 lg:inline-flex",
+					"fixed top-[6px] z-20 hidden rounded-md bg-transparent text-ink shadow-none motion-safe:transition-[left] motion-safe:duration-200 lg:inline-flex",
 					isSidebarCollapsed ? "left-[72px]" : "left-[140px]",
 				)}
 				isIconOnly
@@ -57,35 +57,35 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 			</Button>
 			<aside
 				className={cn(
-					"sticky top-0 hidden h-[100dvh] w-[224px] max-w-[224px] shrink-0 overflow-hidden border-r border-[var(--app-line)] bg-[var(--app-surface)] motion-safe:transition-[max-width,border-color] motion-safe:duration-200 lg:block",
+					"sticky top-0 hidden h-[100dvh] w-[224px] max-w-[224px] shrink-0 overflow-hidden border-r border-hairline bg-surface-soft motion-safe:transition-[max-width,border-color] motion-safe:duration-200 lg:block",
 					isSidebarCollapsed && "max-w-0 border-r-0",
 				)}
 				id="desktop-sidebar"
 			>
 				{!isSidebarCollapsed && (
-					<div className="flex h-full w-[224px] flex-col p-4 pt-14">
-						<div className="flex items-start gap-1">
+					<div className="flex h-full w-[224px] flex-col p-lg pt-14">
+						<div className="flex items-start gap-xs">
 							<button
 								aria-label={t("appName")}
-								className="mr-9 flex min-w-0 flex-1 items-center gap-3 rounded-lg p-2 text-left outline-none transition-colors hover:bg-[var(--app-hover)] focus-visible:ring-2 focus-visible:ring-zinc-800"
+								className="mr-9 flex min-w-0 flex-1 items-center gap-md rounded-lg p-sm text-left outline-none transition-colors hover:bg-surface-soft focus-visible:ring-2 focus-visible:ring-focus-ring"
 								onClick={() => onNavigate("/")}
 								type="button"
 							>
-								<span className="grid size-8 shrink-0 place-items-center rounded-lg bg-zinc-900 text-zinc-50">
+								<span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-on-primary">
 									<ChartColumn aria-hidden="true" className="size-4" />
 								</span>
 								<span className="min-w-0">
-									<span className="block text-sm font-semibold tracking-[-0.02em]">
+									<span className="block font-primary text-body-sm-strong font-semibold">
 										{t("appName")}
 									</span>
-									<span className="block truncate text-[11px] text-[var(--app-muted)]">
+									<span className="block truncate text-caption-sm text-body">
 										{t("appEdition")}
 									</span>
 								</span>
 							</button>
 						</div>
 
-						<nav aria-label={t("mainNavigation")} className="mt-8 space-y-1">
+						<nav aria-label={t("mainNavigation")} className="mt-8 space-y-xs">
 							{NAVIGATION_ITEMS.map((item) => {
 								const ItemIcon = item.icon;
 								const isActive = currentPath === item.path;
@@ -94,9 +94,8 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 									<Button
 										aria-label={t(item.labelKey)}
 										className={cn(
-											"w-full justify-start rounded-lg px-3 text-sm text-[var(--app-muted)]",
-											isActive &&
-												"bg-[var(--app-hover)] font-semibold text-[var(--app-ink)]",
+											"w-full justify-start rounded-lg px-md text-body-sm text-body shadow-none",
+											isActive && "bg-hairline font-medium text-ink",
 										)}
 										key={item.path}
 										onPress={() => onNavigate(item.path)}
@@ -109,16 +108,16 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 							})}
 						</nav>
 
-						<div className="mt-auto border-t border-[var(--app-line)] pt-4">
-							<div className="mb-2 flex items-center gap-2 px-2 text-xs text-[var(--app-muted)]">
+						<div className="mt-auto border-t border-hairline pt-lg">
+							<div className="mb-sm flex items-center gap-sm px-sm text-caption-sm text-body">
 								<Globe aria-hidden="true" className="size-3.5" />
 								{t("languageSelection")}
 							</div>
-							<div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--app-hover)] p-1">
+							<div className="grid grid-cols-2 gap-xs rounded-lg bg-surface-soft p-xs">
 								{(["zh-CN", "en-US"] as const).map((language) => (
 									<Button
 										aria-pressed={i18n.resolvedLanguage === language}
-										className="w-full min-w-0 rounded-md px-2 text-xs text-[var(--app-muted)] aria-pressed:bg-[var(--app-surface)] aria-pressed:text-[var(--app-ink)] aria-pressed:shadow-[0_1px_2px_rgba(24,24,23,0.08)]"
+										className="w-full min-w-0 rounded-md px-sm text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
 										key={language}
 										onPress={() => changeLanguage(language)}
 										size="sm"
@@ -137,21 +136,23 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 				)}
 			</aside>
 
-			<header className="sticky top-0 z-20 flex min-h-16 items-center border-b border-[var(--app-line)] bg-[color:var(--app-surface)/0.94] px-4 backdrop-blur lg:hidden">
+			<header className="sticky top-0 z-20 flex min-h-16 items-center border-b border-hairline bg-canvas/95 px-lg backdrop-blur lg:hidden">
 				<button
 					aria-label={t("appName")}
-					className="mr-auto flex items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-zinc-800"
+					className="mr-auto flex items-center gap-sm rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
 					onClick={() => onNavigate("/")}
 					type="button"
 				>
-					<span className="grid size-8 place-items-center rounded-lg bg-zinc-900 text-zinc-50">
+					<span className="grid size-8 place-items-center rounded-lg bg-primary text-on-primary">
 						<ChartColumn aria-hidden="true" className="size-4" />
 					</span>
-					<span className="text-sm font-semibold">{t("appName")}</span>
+					<span className="font-primary text-body-sm-strong font-semibold">
+						{t("appName")}
+					</span>
 				</button>
 				<nav
 					aria-label={t("mainNavigation")}
-					className="flex items-center gap-1"
+					className="flex items-center gap-xs"
 				>
 					{NAVIGATION_ITEMS.map((item) => {
 						const ItemIcon = item.icon;
@@ -160,9 +161,8 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 							<Button
 								aria-label={t(item.labelKey)}
 								className={cn(
-									"rounded-lg text-[var(--app-muted)]",
-									currentPath === item.path &&
-										"bg-[var(--app-hover)] text-[var(--app-ink)]",
+									"rounded-lg text-body shadow-none",
+									currentPath === item.path && "bg-hairline text-ink",
 								)}
 								isIconOnly
 								key={item.path}
