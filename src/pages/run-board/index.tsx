@@ -33,19 +33,19 @@ const BOARD_STATUSES: RunBoardStatus[] = [
 const STATUS_PRESENTATIONS: Record<RunBoardStatus, StatusPresentation> = {
 	running: {
 		icon: Play,
-		iconClassName: "text-blue-600",
+		iconClassName: "text-ink",
 	},
 	waiting: {
 		icon: CircleQuestion,
-		iconClassName: "text-amber-500",
+		iconClassName: "text-terminal-yellow",
 	},
 	finish: {
 		icon: CircleCheck,
-		iconClassName: "text-emerald-600",
+		iconClassName: "text-terminal-green",
 	},
 	error: {
 		icon: TriangleExclamation,
-		iconClassName: "text-rose-600",
+		iconClassName: "text-terminal-red",
 	},
 };
 
@@ -56,23 +56,23 @@ const RunBoardPage = () => {
 
 	return (
 		<main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-			<header className="mb-5 flex flex-col gap-5 border-b border-[var(--app-line)] pb-7 sm:flex-row sm:items-end sm:justify-between">
+			<header className="mb-5 flex flex-col gap-5 border-b border-hairline pb-7 sm:flex-row sm:items-end sm:justify-between">
 				<div>
-					<h1 className="text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-4xl">
+					<h1 className="font-primary text-display-lg font-medium leading-display-lg sm:text-display-xl sm:leading-display-xl">
 						{t("runBoard.title")}
 					</h1>
-					<p className="mt-3 max-w-[65ch] text-sm leading-6 text-[var(--app-muted)] sm:text-base">
+					<p className="mt-md max-w-[65ch] text-body-sm leading-body-md text-body sm:text-body-md">
 						{t("runBoard.description")}
 					</p>
 				</div>
 				<fieldset
 					aria-label={t("runBoard.layoutSelection")}
-					className="flex shrink-0 items-center gap-1 rounded-lg bg-[var(--app-hover)] p-1"
+					className="flex shrink-0 items-center gap-xs rounded-lg bg-surface-soft p-xs"
 				>
 					<Button
 						aria-pressed={layout === "vertical"}
 						aria-label={t("runBoard.verticalLayout")}
-						className="rounded-md px-2.5 text-xs text-[var(--app-muted)] aria-pressed:bg-[var(--app-surface)] aria-pressed:text-[var(--app-ink)] aria-pressed:shadow-[0_1px_2px_rgba(24,24,23,0.08)]"
+						className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
 						onPress={() => setLayout("vertical")}
 						size="sm"
 						variant="ghost"
@@ -82,7 +82,7 @@ const RunBoardPage = () => {
 					<Button
 						aria-pressed={layout === "horizontal"}
 						aria-label={t("runBoard.horizontalLayout")}
-						className="rounded-md px-2.5 text-xs text-[var(--app-muted)] aria-pressed:bg-[var(--app-surface)] aria-pressed:text-[var(--app-ink)] aria-pressed:shadow-[0_1px_2px_rgba(24,24,23,0.08)]"
+						className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
 						onPress={() => setLayout("horizontal")}
 						size="sm"
 						variant="ghost"
@@ -94,7 +94,7 @@ const RunBoardPage = () => {
 
 			<div
 				className={cn(
-					"grid overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)]",
+					"grid overflow-hidden rounded-xl border border-hairline bg-surface-card",
 					layout === "vertical" &&
 						"lg:grid-cols-2 xl:min-h-[40rem] xl:grid-cols-4",
 				)}
@@ -112,7 +112,7 @@ const RunBoardPage = () => {
 						<section
 							aria-labelledby={`board-${status}`}
 							className={cn(
-								"flex min-w-0 flex-col border-b border-[var(--app-line)]",
+								"flex min-w-0 flex-col border-b border-hairline",
 								layout === "vertical" &&
 									"lg:border-r lg:[&:nth-child(2n)]:border-r-0 lg:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-child(2n)]:border-r xl:[&:nth-child(4n)]:border-r-0 xl:[&:nth-last-child(-n+4)]:border-b-0",
 								layout === "horizontal" && "lg:flex-row lg:last:border-b-0",
@@ -121,7 +121,7 @@ const RunBoardPage = () => {
 						>
 							<header
 								className={cn(
-									"flex items-center border-b border-[var(--app-line)] px-4 py-3.5",
+									"flex items-center border-b border-hairline px-4 py-3.5",
 									layout === "horizontal" &&
 										"lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r",
 								)}
@@ -136,12 +136,12 @@ const RunBoardPage = () => {
 									/>
 									<div className="min-w-0">
 										<h2
-											className="text-sm font-semibold"
+											className="text-body-sm-strong font-medium"
 											id={`board-${status}`}
 										>
 											{t(`runBoard.status.${status}`)}
 										</h2>
-										<p className="truncate text-[11px] text-[var(--app-muted)]">
+										<p className="truncate text-caption-sm text-body">
 											{t(`runBoard.statusDescription.${status}`)}
 										</p>
 									</div>
@@ -150,7 +150,7 @@ const RunBoardPage = () => {
 
 							<div
 								className={cn(
-									"min-h-48 flex-1 space-y-3 bg-[color:var(--app-canvas)]/45 p-3",
+									"min-h-48 flex-1 space-y-3 bg-surface-soft/50 p-3",
 									layout === "horizontal" &&
 										"lg:flex lg:flex-wrap lg:items-start lg:gap-3 lg:space-y-0",
 								)}
@@ -159,13 +159,13 @@ const RunBoardPage = () => {
 									items.map((item) => (
 										<Card
 											className={cn(
-												"h-48 w-[18rem] max-w-full overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-raised)] shadow-none transition-colors hover:border-zinc-400",
+												"h-48 w-[18rem] max-w-full overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-none transition-colors hover:border-hairline-strong",
 											)}
 											key={item.id}
 											role="article"
 										>
 											<Card.Content className="p-3">
-												<div className="flex items-center justify-between gap-3 text-[11px] text-[var(--app-faint)]">
+												<div className="flex items-center justify-between gap-3 text-caption-sm text-mute">
 													<span className="font-mono">{item.id}</span>
 													<span className="flex min-w-0 max-w-[55%] items-center gap-1.5 truncate">
 														<AgentLogo
@@ -177,13 +177,13 @@ const RunBoardPage = () => {
 														</span>
 													</span>
 												</div>
-												<h3 className="mt-3 line-clamp-2 overflow-hidden text-sm font-semibold tracking-[-0.015em]">
+												<h3 className="mt-3 line-clamp-2 overflow-hidden text-body-sm-strong font-medium">
 													{t(item.titleKey)}
 												</h3>
-												<p className="mt-1 line-clamp-2 overflow-hidden text-xs leading-5 text-[var(--app-muted)]">
+												<p className="mt-1 line-clamp-2 overflow-hidden text-caption-sm leading-body-sm text-body">
 													{t(item.descriptionKey)}
 												</p>
-												<div className="mt-3 flex items-center justify-between border-t border-[var(--app-line)] pt-2 font-mono text-[11px] text-[var(--app-faint)]">
+												<div className="mt-3 flex items-center justify-between border-t border-hairline pt-2 font-mono text-caption-sm text-mute">
 													<span>{item.time}</span>
 													<span className="flex items-center gap-1.5">
 														<Clock aria-hidden="true" className="size-3.5" />
@@ -194,7 +194,7 @@ const RunBoardPage = () => {
 										</Card>
 									))
 								) : (
-									<p className="px-4 py-10 text-center text-xs text-[var(--app-muted)]">
+									<p className="px-4 py-10 text-center text-caption-sm text-body">
 										{t("runBoard.empty")}
 									</p>
 								)}
