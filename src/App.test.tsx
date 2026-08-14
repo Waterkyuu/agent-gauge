@@ -486,6 +486,12 @@ describe("App", () => {
 					response: "Codex 完成",
 					totalDurationMs: 2450,
 					timeToFirstTokenMs: 680,
+					thinkingDurationMs: 1200,
+					toolCallCount: 2,
+					toolCalls: [
+						{ sequence: 1, name: "Read", durationMs: 120 },
+						{ sequence: 2, name: "Bash", durationMs: 21_000 },
+					],
 					tokenUsage: {
 						totalTokens: 1280,
 						inputTokens: 900,
@@ -501,6 +507,9 @@ describe("App", () => {
 					response: "Claude 完成",
 					totalDurationMs: 3100,
 					timeToFirstTokenMs: 540,
+					thinkingDurationMs: 900,
+					toolCallCount: 1,
+					toolCalls: [{ sequence: 1, name: "WebSearch", durationMs: 61_000 }],
 					tokenUsage: {
 						totalTokens: 2950,
 						inputTokens: 2920,
@@ -516,6 +525,9 @@ describe("App", () => {
 					response: "WorkBuddy 完成",
 					totalDurationMs: 14_619,
 					timeToFirstTokenMs: 12_089,
+					thinkingDurationMs: 400,
+					toolCallCount: 0,
+					toolCalls: [],
 					tokenUsage: {
 						totalTokens: 26_509,
 						inputTokens: 26_484,
@@ -587,8 +599,22 @@ describe("App", () => {
 		});
 		expect(within(codexResult).getByText("680 ms")).toBeInTheDocument();
 		expect(within(codexResult).getByText("1,280")).toBeInTheDocument();
+		expect(within(codexResult).getByText("思考时间")).toBeInTheDocument();
+		expect(within(codexResult).getByText("1.20 s")).toBeInTheDocument();
+		expect(within(codexResult).getByText("工具调用")).toBeInTheDocument();
+		expect(within(codexResult).getByText("Read")).toBeInTheDocument();
+		expect(within(codexResult).getByText("Bash")).toBeInTheDocument();
+		expect(within(codexResult).getByText("21.00 s")).toHaveClass(
+			"text-red-700",
+		);
 		expect(within(claudeResult).getByText("540 ms")).toBeInTheDocument();
+		expect(within(claudeResult).getByText("61.00 s")).toHaveClass(
+			"text-red-900",
+		);
 		expect(within(workbuddyResult).getByText("14.62 s")).toBeInTheDocument();
+		expect(
+			within(workbuddyResult).getByText("本次未调用工具"),
+		).toBeInTheDocument();
 		expect(within(codexResult).getByText("Codex 完成")).toBeInTheDocument();
 		expect(within(claudeResult).getByText("Claude 完成")).toBeInTheDocument();
 		expect(
@@ -617,6 +643,9 @@ describe("App", () => {
 					response: "OK",
 					totalDurationMs: 1000,
 					timeToFirstTokenMs: 500,
+					thinkingDurationMs: 0,
+					toolCallCount: 0,
+					toolCalls: [],
 					tokenUsage: null,
 				});
 			}
@@ -668,6 +697,9 @@ describe("App", () => {
 					response: "成功结果",
 					totalDurationMs: 1000,
 					timeToFirstTokenMs: 500,
+					thinkingDurationMs: 0,
+					toolCallCount: 0,
+					toolCalls: [],
 					tokenUsage: null,
 				});
 			}
