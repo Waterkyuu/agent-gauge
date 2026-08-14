@@ -14,7 +14,12 @@
 			{
 				"title": "AgentGauge",
 				"theme": "Light",
+				"decorations": true,
 				"titleBarStyle": "Overlay",
+				"trafficLightPosition": {
+					"x": 14,
+					"y": 20
+				},
 				"hiddenTitle": true,
 				"width": 1120,
 				"height": 720,

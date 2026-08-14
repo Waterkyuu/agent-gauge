@@ -45,8 +45,8 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 				aria-expanded={!isSidebarCollapsed}
 				aria-label={t(isSidebarCollapsed ? "expandSidebar" : "collapseSidebar")}
 				className={cn(
-					"fixed top-2 z-20 hidden rounded-md bg-transparent text-[var(--app-ink)] shadow-none motion-safe:transition-[left] motion-safe:duration-200 lg:inline-flex",
-					isSidebarCollapsed ? "left-4" : "left-[175px]",
+					"fixed top-[6px] z-20 hidden rounded-md bg-transparent text-[var(--app-ink)] shadow-none motion-safe:transition-[left] motion-safe:duration-200 lg:inline-flex",
+					isSidebarCollapsed ? "left-[72px]" : "left-[140px]",
 				)}
 				isIconOnly
 				onPress={() => setIsSidebarCollapsed((isCollapsed) => !isCollapsed)}
