@@ -55,6 +55,7 @@ impl From<AgentRunOutput> for RunClaudeTaskResponse {
             total_duration,
             time_to_first_token,
             token_usage,
+            ..
         } = output.metrics;
 
         Self {

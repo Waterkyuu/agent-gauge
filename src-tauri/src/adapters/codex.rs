@@ -141,6 +141,50 @@ struct AppServerParams {
     delta: Option<String>,
     token_usage: Option<ThreadTokenUsage>,
     turn: Option<AppServerTurn>,
+    item: Option<AppServerThreadItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppServerThreadItem {
+    /// Lifecycle identifier shared by item/started and item/completed.
+    id: String,
+    /// Discriminator for reasoning, command, MCP, and other app-server items.
+    #[serde(rename = "type")]
+    item_type: String,
+    /// MCP server name when this item represents an MCP tool call.
+    server: Option<String>,
+    /// Tool name reported for MCP, dynamic, and collaboration calls.
+    tool: Option<String>,
+    /// Dynamic-tool namespace when one is present.
+    namespace: Option<String>,
+}
+
+impl AppServerThreadItem {
+    /// Normalizes every executable app-server item into one concise display name.
+    fn tool_name(&self) -> Option<String> {
+        match self.item_type.as_str() {
+            "commandExecution" | "fileChange" | "webSearch" | "imageView" | "imageGeneration"
+            | "sleep" => Some(self.item_type.clone()),
+            "mcpToolCall" => Some(
+                [self.server.as_deref(), self.tool.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("."),
+            ),
+            "dynamicToolCall" => Some(
+                [self.namespace.as_deref(), self.tool.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("."),
+            ),
+            "collabAgentToolCall" => self.tool.clone(),
+            _ => None,
+        }
+        .filter(|name| !name.is_empty())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -503,6 +547,28 @@ fn collect_run_events(
                     collector.record_token_usage(usage.last.into());
                 }
             }
+            Some("item/started") => {
+                if let Some(item) = message.params.and_then(|params| params.item) {
+                    let elapsed = started_at.elapsed();
+                    // Reasoning is timed separately; all executable item kinds enter the tool list.
+                    if item.item_type == "reasoning" {
+                        collector.record_thinking_started(&item.id, elapsed);
+                    } else if let Some(name) = item.tool_name() {
+                        collector.record_tool_started(&item.id, &name, elapsed);
+                    }
+                }
+            }
+            Some("item/completed") => {
+                if let Some(item) = message.params.and_then(|params| params.item) {
+                    let elapsed = started_at.elapsed();
+                    // The stable item id prevents concurrent calls from being paired incorrectly.
+                    if item.item_type == "reasoning" {
+                        collector.record_thinking_finished(&item.id, elapsed);
+                    } else if item.tool_name().is_some() {
+                        collector.record_tool_finished(&item.id, elapsed);
+                    }
+                }
+            }
             Some("turn/completed") => {
                 let completed = message
                     .params
@@ -665,6 +731,28 @@ mod tests {
 
             assert_eq!(result, Err(AppError::CodexNeedsInput));
         }
+    }
+
+    #[test]
+    fn records_codex_reasoning_and_tool_item_lifecycles() {
+        let (sender, receiver) = mpsc::sync_channel(5);
+        for fixture in [
+            r#"{"method":"item/started","params":{"item":{"id":"reason-1","type":"reasoning"}}}"#,
+            r#"{"method":"item/completed","params":{"item":{"id":"reason-1","type":"reasoning"}}}"#,
+            r#"{"method":"item/started","params":{"item":{"id":"tool-1","type":"mcpToolCall","server":"github","tool":"search"}}}"#,
+            r#"{"method":"item/completed","params":{"item":{"id":"tool-1","type":"mcpToolCall","server":"github","tool":"search"}}}"#,
+            r#"{"method":"turn/completed","params":{"turn":{"status":"completed"}}}"#,
+        ] {
+            sender
+                .send(Ok(fixture.to_string()))
+                .expect("fixture should be queued");
+        }
+
+        let output = collect_run_events(&receiver, Instant::now())
+            .expect("valid item lifecycle should complete");
+
+        assert_eq!(output.metrics.tool_calls.len(), 1);
+        assert_eq!(output.metrics.tool_calls[0].name, "github.search");
     }
 
     #[test]
