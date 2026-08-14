@@ -75,6 +75,9 @@ const zhCN = {
 			title: "Agent 运行看板",
 			description:
 				"按状态追踪本地 Agent 任务，查看正在执行、等待回答、已完成和异常中断的工作。",
+			layoutSelection: "切换看板布局",
+			verticalLayout: "竖面板",
+			horizontalLayout: "水平面板",
 			empty: "此状态下暂无任务。",
 			status: {
 				running: "运行中",

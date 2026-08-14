@@ -163,6 +163,39 @@ describe("App", () => {
 		await waitFor(() => expect(window.location.pathname).toBe("/"));
 	});
 
+	// Verifies that the run board can switch between vertical columns and horizontal rows.
+	it("switches the run board between vertical and horizontal layouts", async () => {
+		const user = userEvent.setup();
+		render(<App />);
+
+		await user.click(
+			within(screen.getByRole("complementary")).getByRole("button", {
+				name: /运行看板|Run board/,
+			}),
+		);
+
+		const layoutGroup = await screen.findByRole("group", {
+			name: /切换看板布局|Switch run board layout/,
+		});
+		const board = screen.getByTestId("run-board");
+		const verticalButton = within(layoutGroup).getByRole("button", {
+			name: /竖面板|Vertical panel/,
+		});
+		const horizontalButton = within(layoutGroup).getByRole("button", {
+			name: /水平面板|Horizontal panel/,
+		});
+
+		expect(verticalButton).toHaveAttribute("aria-pressed", "true");
+		expect(horizontalButton).toHaveAttribute("aria-pressed", "false");
+		expect(board).toHaveAttribute("data-layout", "vertical");
+
+		await user.click(horizontalButton);
+
+		expect(verticalButton).toHaveAttribute("aria-pressed", "false");
+		expect(horizontalButton).toHaveAttribute("aria-pressed", "true");
+		expect(board).toHaveAttribute("data-layout", "horizontal");
+	});
+
 	// Verifies that the running process state refreshes without reloading the UI.
 	it("refreshes the selected agent process state", async () => {
 		let processProbeCount = 0;

@@ -76,6 +76,9 @@ const enUS = {
 			title: "Agent run board",
 			description:
 				"Track local agent tasks that are running, awaiting input, completed, or interrupted.",
+			layoutSelection: "Switch run board layout",
+			verticalLayout: "Vertical panel",
+			horizontalLayout: "Horizontal panel",
 			empty: "No tasks in this status.",
 			status: {
 				running: "Running",
