@@ -1,4 +1,4 @@
-use crate::domain::codex_run::{AgentRunMetrics, AgentRunOutput, TokenUsage, ToolCallMetric};
+use crate::domain::codex_run::{AgentRunMetrics, AgentRunOutput, TokenUsage};
 use serde::Serialize;
 
 /// Token consumption reported for one completed Agent task.
@@ -23,6 +23,8 @@ pub(crate) struct TokenUsageResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ToolCallMetricResponse {
+    /// One-based start order within the current Agent task.
+    sequence: usize,
     /// Stable tool name supplied by the source protocol.
     name: String,
     /// Wall-clock execution duration in milliseconds.
@@ -62,15 +64,6 @@ impl From<TokenUsage> for TokenUsageResponse {
     }
 }
 
-impl From<ToolCallMetric> for ToolCallMetricResponse {
-    fn from(tool_call: ToolCallMetric) -> Self {
-        Self {
-            name: tool_call.name,
-            duration_ms: duration_millis(tool_call.duration),
-        }
-    }
-}
-
 impl From<AgentRunOutput> for AgentRunResponse {
     fn from(output: AgentRunOutput) -> Self {
         let AgentRunMetrics {
@@ -88,7 +81,15 @@ impl From<AgentRunOutput> for AgentRunResponse {
             token_usage: token_usage.map(Into::into),
             thinking_duration_ms: duration_millis(thinking_duration),
             tool_call_count: tool_calls.len(),
-            tool_calls: tool_calls.into_iter().map(Into::into).collect(),
+            tool_calls: tool_calls
+                .into_iter()
+                .enumerate()
+                .map(|(index, tool_call)| ToolCallMetricResponse {
+                    sequence: index + 1,
+                    name: tool_call.name,
+                    duration_ms: duration_millis(tool_call.duration),
+                })
+                .collect(),
         }
     }
 }
@@ -122,6 +123,7 @@ mod tests {
 
         assert_eq!(response.thinking_duration_ms, 900);
         assert_eq!(response.tool_call_count, 1);
+        assert_eq!(response.tool_calls[0].sequence, 1);
         assert_eq!(response.tool_calls[0].name, "Read");
         assert_eq!(response.tool_calls[0].duration_ms, 250);
     }
