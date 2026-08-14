@@ -164,7 +164,7 @@ const RunBoardPage = () => {
 											key={item.id}
 											role="article"
 										>
-											<Card.Content className="p-4">
+											<Card.Content className="p-3">
 												<div className="flex items-center justify-between gap-3 text-[11px] text-[var(--app-faint)]">
 													<span className="font-mono">{item.id}</span>
 													<span className="flex min-w-0 max-w-[55%] items-center gap-1.5 truncate">
@@ -177,13 +177,13 @@ const RunBoardPage = () => {
 														</span>
 													</span>
 												</div>
-												<h3 className="mt-4 line-clamp-2 overflow-hidden text-sm font-semibold tracking-[-0.015em]">
+												<h3 className="mt-3 line-clamp-2 overflow-hidden text-sm font-semibold tracking-[-0.015em]">
 													{t(item.titleKey)}
 												</h3>
-												<p className="mt-1.5 line-clamp-2 overflow-hidden text-xs leading-5 text-[var(--app-muted)]">
+												<p className="mt-1 line-clamp-2 overflow-hidden text-xs leading-5 text-[var(--app-muted)]">
 													{t(item.descriptionKey)}
 												</p>
-												<div className="mt-4 flex items-center justify-between border-t border-[var(--app-line)] pt-3 font-mono text-[11px] text-[var(--app-faint)]">
+												<div className="mt-3 flex items-center justify-between border-t border-[var(--app-line)] pt-2 font-mono text-[11px] text-[var(--app-faint)]">
 													<span>{item.time}</span>
 													<span className="flex items-center gap-1.5">
 														<Clock aria-hidden="true" className="size-3.5" />
