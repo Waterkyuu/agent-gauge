@@ -1,4 +1,4 @@
-use crate::domain::codex_run::AgentRunOutput;
+use crate::domain::agent_run::AgentRunOutput;
 use crate::error::AppError;
 
 /// Normalized execution boundary shared by every locally monitored agent product.

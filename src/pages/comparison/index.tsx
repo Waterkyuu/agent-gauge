@@ -4,7 +4,11 @@ import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { checkAgentProcesses } from "@/api/agent";
-import { checkClaudeLogin, runClaudeTask } from "@/api/claude";
+import {
+	checkClaudeLogin,
+	onClaudeConfigChanged,
+	runClaudeTask,
+} from "@/api/claude";
 import {
 	checkCodexLogin,
 	onCodexConfigChanged,
@@ -122,55 +126,55 @@ const resolveAgentStatus = (
 	if (loginState.status === "checking") {
 		return {
 			message: t("checkingLogin", { agent: agentName }),
-			tone: "bg-zinc-400",
+			tone: "bg-mute",
 			isReady: false,
 		};
 	}
 	if (loginState.status === "failed") {
 		return {
 			message: t("loginCheckFailed", { agent: agentName }),
-			tone: "bg-zinc-300",
+			tone: "bg-hairline-strong",
 			isReady: false,
 		};
 	}
 	if (!loginState.value.installed) {
 		return {
 			message: t("notInstalled", { agent: agentName }),
-			tone: "bg-zinc-300",
+			tone: "bg-hairline-strong",
 			isReady: false,
 		};
 	}
 	if (!loginState.value.loggedIn) {
 		return {
 			message: t("notLoggedIn", { agent: agentName }),
-			tone: "bg-zinc-300",
+			tone: "bg-hairline-strong",
 			isReady: false,
 		};
 	}
 	if (processState.status === "checking") {
 		return {
 			message: t("checkingProcess", { agent: agentName }),
-			tone: "bg-zinc-400",
+			tone: "bg-mute",
 			isReady: true,
 		};
 	}
 	if (processState.status === "failed") {
 		return {
 			message: t("processCheckFailed", { agent: agentName }),
-			tone: "bg-zinc-300",
+			tone: "bg-hairline-strong",
 			isReady: true,
 		};
 	}
 	if (processState.value[agent]) {
 		return {
 			message: t("agentRunning", { agent: agentName }),
-			tone: "bg-zinc-800",
+			tone: "bg-primary",
 			isReady: true,
 		};
 	}
 	return {
 		message: t("agentReady", { agent: agentName }),
-		tone: "bg-zinc-500",
+		tone: "bg-charcoal",
 		isReady: true,
 	};
 };
@@ -285,15 +289,24 @@ const ComparisonPage = () => {
 		refreshLoginStates();
 		const intervalId = window.setInterval(refreshLoginStates, 5000);
 		window.addEventListener("focus", refreshLoginStates);
-		const stopCodexConfigListener = onCodexConfigChanged(() => {
-			refreshLoginStateAfterChange("codex");
-		});
+		const stopConfigListeners = Promise.all([
+			onCodexConfigChanged(() => {
+				refreshLoginStateAfterChange("codex");
+			}),
+			onClaudeConfigChanged(() => {
+				refreshLoginStateAfterChange("claude");
+			}),
+		]);
 
 		return () => {
 			isActive = false;
 			window.clearInterval(intervalId);
 			window.removeEventListener("focus", refreshLoginStates);
-			void stopCodexConfigListener.then((stopListening) => stopListening());
+			stopConfigListeners.then((stopListeners) => {
+				for (const stopListening of stopListeners) {
+					stopListening();
+				}
+			});
 		};
 	}, [isRunning]);
 
@@ -334,12 +347,10 @@ const ComparisonPage = () => {
 
 		refreshProcessesAfterLoginRef.current = refreshAgentProcesses;
 		refreshAgentProcesses();
-		const intervalId = window.setInterval(refreshAgentProcesses, 1000);
 
 		return () => {
 			isActive = false;
 			refreshProcessesAfterLoginRef.current = () => {};
-			window.clearInterval(intervalId);
 		};
 	}, []);
 
@@ -458,23 +469,25 @@ const ComparisonPage = () => {
 
 	return (
 		<main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-			<header className="mb-8 border-b border-[var(--app-line)] pb-7">
-				<p className="mb-2 text-sm font-medium text-[var(--app-muted)]">
+			<header className="mb-8 border-b border-hairline pb-7">
+				<p className="mb-sm text-body-sm font-medium text-body">
 					{t("tagline")}
 				</p>
-				<h1 className="max-w-3xl text-3xl font-semibold leading-[1.08] tracking-[-0.04em] sm:text-4xl">
+				<h1 className="max-w-3xl font-primary text-display-lg font-medium leading-display-lg sm:text-display-xl sm:leading-display-xl">
 					{t("title")}
 				</h1>
-				<p className="mt-3 max-w-[65ch] text-sm leading-6 text-[var(--app-muted)] sm:text-base">
+				<p className="mt-md max-w-[65ch] text-body-sm leading-body-md text-body sm:text-body-md">
 					{t("description")}
 				</p>
 			</header>
 
 			<div className="grid items-start gap-5 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.35fr)]">
-				<section className="overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)]">
-					<header className="flex items-center justify-between gap-4 border-b border-[var(--app-line)] px-4 py-3.5">
-						<h2 className="text-sm font-semibold">{t("agentSelection")}</h2>
-						<span className="font-mono text-xs text-[var(--app-muted)] tabular-nums">
+				<section className="overflow-hidden rounded-xl border border-hairline bg-surface-card">
+					<header className="flex items-center justify-between gap-lg border-b border-hairline px-lg py-md sm:px-xl">
+						<h2 className="text-body-sm-strong font-medium">
+							{t("agentSelection")}
+						</h2>
+						<span className="rounded-full bg-surface-soft px-md py-xs font-mono text-caption-sm text-body tabular-nums">
 							{runnableAgents.length} / {AGENT_KINDS.length}
 						</span>
 					</header>
@@ -502,23 +515,25 @@ const ComparisonPage = () => {
 					</fieldset>
 				</section>
 
-				<Card className="overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-raised)] shadow-none">
+				<Card className="overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-none">
 					<form onSubmit={onSubmit}>
-						<Card.Header className="!flex-row !justify-start gap-3 border-b border-[var(--app-line)] px-4 py-3.5 sm:px-5">
-							<span className="grid size-8 place-items-center rounded-lg bg-[var(--app-hover)] text-[var(--app-muted)]">
+						<Card.Header className="!flex-row !justify-start gap-md border-b border-hairline px-lg py-md sm:px-xl">
+							<span className="grid size-8 place-items-center rounded-lg bg-surface-soft text-body">
 								<MagicWand aria-hidden="true" className="size-4" />
 							</span>
-							<p className="text-sm font-semibold">{t("queryLabel")}</p>
+							<p className="text-body-sm-strong font-medium">
+								{t("queryLabel")}
+							</p>
 						</Card.Header>
-						<Card.Content className="p-4 sm:p-5">
+						<Card.Content className="p-lg sm:p-xl">
 							<label
-								className="mb-2 block text-xs font-medium text-[var(--app-muted)]"
+								className="mb-sm block text-body-sm font-medium text-charcoal"
 								htmlFor="agent-query"
 							>
 								{t("queryLabel")}
 							</label>
 							<TextArea
-								className="min-h-56 w-full resize-y rounded-lg border border-[var(--app-line)] bg-[var(--app-canvas)] p-4 text-sm leading-6 text-[var(--app-ink)] outline-none transition-colors placeholder:text-[var(--app-faint)] focus:border-zinc-700 focus:bg-[var(--app-raised)] focus:ring-2 focus:ring-zinc-200"
+								className="min-h-56 w-full resize-y rounded-lg border border-hairline bg-canvas p-lg text-body-sm leading-body-md text-ink outline-none transition-colors placeholder:text-mute focus:border-hairline-strong focus:ring-2 focus:ring-focus-ring"
 								disabled={isRunning}
 								id="agent-query"
 								maxLength={16000}
@@ -527,16 +542,16 @@ const ComparisonPage = () => {
 								value={query}
 								variant="secondary"
 							/>
-							<p className="mt-2 text-right font-mono text-[11px] text-[var(--app-muted)] tabular-nums">
+							<p className="mt-sm text-right font-mono text-caption-sm text-body tabular-nums">
 								{query.length.toLocaleString(numberLocale)} / 16,000
 							</p>
 						</Card.Content>
-						<Card.Footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-line)] bg-[var(--app-surface)] px-4 py-3.5 sm:px-5">
-							<p className="text-xs text-[var(--app-muted)]">
+						<Card.Footer className="flex flex-wrap items-center justify-between gap-md border-t border-hairline bg-surface-soft px-lg py-md sm:px-xl">
+							<p className="text-caption-sm text-body">
 								{t("selectedAgents", { count: runnableAgents.length })}
 							</p>
 							<Button
-								className="rounded-lg bg-zinc-900 px-5 text-zinc-50 transition-transform active:scale-[0.98]"
+								className="h-9 rounded-full bg-primary px-5 text-button-md font-medium text-on-primary shadow-none transition-transform active:scale-[0.98]"
 								isDisabled={
 									isRunning ||
 									query.trim().length === 0 ||
@@ -557,10 +572,13 @@ const ComparisonPage = () => {
 
 			{comparisonAgents.length > 0 ? (
 				<section className="mt-8" aria-labelledby="comparison-title">
-					<h2 className="mb-3 text-sm font-semibold" id="comparison-title">
+					<h2
+						className="mb-md text-body-sm-strong font-semibold"
+						id="comparison-title"
+					>
 						{t("comparisonTitle")}
 					</h2>
-					<div className="grid overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] lg:grid-cols-3">
+					<div className="grid overflow-hidden rounded-xl border border-hairline bg-surface-card lg:grid-cols-3">
 						{comparisonAgents.map((agent) => {
 							const runState = runStates[agent];
 

@@ -1,5 +1,5 @@
 use crate::adapters::agent::AgentAdapter;
-use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
+use crate::domain::agent_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
 use crate::platform::codex_config::codex_config_paths;
 use serde::Deserialize;
@@ -25,10 +25,15 @@ const MAX_RUNTIME_DEFAULT_RESOLUTION_ATTEMPTS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexAuthentication {
+    /// Indicates whether a usable Codex executable was found locally.
     pub(crate) installed: bool,
+    /// Indicates whether the Codex CLI reports active credentials.
     pub(crate) logged_in: bool,
+    /// Safe authentication mode parsed from the Codex CLI status output.
     pub(crate) authentication_method: Option<String>,
+    /// Effective model selected for newly created Codex threads.
     pub(crate) model: Option<String>,
+    /// Effective reasoning effort selected for newly created Codex threads.
     pub(crate) reasoning_effort: Option<String>,
 }
 
@@ -38,6 +43,7 @@ pub(crate) trait CodexAdapter {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SystemCodexAdapter {
+    /// Shared cache of effective runtime defaults used by authentication probes.
     runtime_defaults_cache: CodexRuntimeDefaultsCache,
 }
 
@@ -50,10 +56,25 @@ impl SystemCodexAdapter {
 }
 
 impl CodexAdapter for SystemCodexAdapter {
-    /// Detects a local Codex executable and asks the CLI whether it has active credentials.
+    /// Checks the installed, login, and effective runtime status of the local Codex CLI.
     ///
-    /// A non-zero `codex login status` result means the executable exists but is logged out.
-    /// Missing candidates are skipped so bundled macOS executables can be used as fallbacks.
+    /// The login-status service calls this method through [`CodexAdapter`]; the task execution path
+    /// uses a separate executable check. Each candidate receives `codex login status` in order.
+    /// Successfully starting any candidate proves that Codex is installed. Exit code zero means
+    /// logged in, while a non-zero exit code means installed but logged out.
+    ///
+    /// Missing candidates are skipped so bundled macOS executables remain available as fallbacks.
+    /// If every candidate is missing, this method clears cached runtime settings and returns an
+    /// installed and login status of `false`. Any other process-start failure returns
+    /// [`AppError::CodexProbeFailed`].
+    ///
+    /// For a logged-in installation, the returned [`CodexAuthentication`] also contains the safe
+    /// authentication label plus the effective model and reasoning effort. Logged-out and missing
+    /// installations clear those cached settings so later probes cannot display stale values.
+    ///
+    /// For example, a candidate that starts and exits non-zero returns `installed: true` with
+    /// `logged_in: false`; a machine where every candidate is missing returns both fields as
+    /// `false` without treating absence as a probe error.
     fn check_authentication(&self) -> Result<CodexAuthentication, AppError> {
         for executable in codex_executable_candidates() {
             let output = Command::new(&executable)
@@ -120,7 +141,7 @@ impl CodexAdapter for SystemCodexAdapter {
 
 impl AgentAdapter for SystemCodexAdapter {
     fn run_task(&self, query: &str) -> Result<AgentRunOutput, AppError> {
-        let executable = resolve_codex_executable()?;
+        let executable = find_usable_codex_executable()?;
         with_app_server(&executable, |stdin, event_receiver| {
             run_app_server_task(stdin, event_receiver, query)
         })
@@ -129,62 +150,130 @@ impl AgentAdapter for SystemCodexAdapter {
 
 #[derive(Debug, Deserialize)]
 struct AppServerMessage {
+    /// JSON-RPC request identifier when the message is a response.
     id: Option<u64>,
+    /// App Server notification method when the message is an event.
     method: Option<String>,
+    /// Event payload supplied by an App Server notification.
     params: Option<AppServerParams>,
+    /// Successful JSON-RPC response payload.
     result: Option<AppServerResult>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppServerParams {
+    /// Incremental assistant text emitted by a streaming notification.
     delta: Option<String>,
+    /// Latest cumulative token usage for the active thread.
     token_usage: Option<ThreadTokenUsage>,
+    /// Turn state emitted by a turn lifecycle notification.
     turn: Option<AppServerTurn>,
+    /// Item state emitted by an item lifecycle notification.
+    item: Option<AppServerThreadItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppServerThreadItem {
+    /// Lifecycle identifier shared by item/started and item/completed.
+    id: String,
+    /// Discriminator for reasoning, command, MCP, and other app-server items.
+    #[serde(rename = "type")]
+    item_type: String,
+    /// MCP server name when this item represents an MCP tool call.
+    server: Option<String>,
+    /// Tool name reported for MCP, dynamic, and collaboration calls.
+    tool: Option<String>,
+    /// Dynamic-tool namespace when one is present.
+    namespace: Option<String>,
+}
+
+impl AppServerThreadItem {
+    /// Normalizes every executable app-server item into one concise display name.
+    fn tool_name(&self) -> Option<String> {
+        match self.item_type.as_str() {
+            "commandExecution" | "fileChange" | "webSearch" | "imageView" | "imageGeneration"
+            | "sleep" => Some(self.item_type.clone()),
+            "mcpToolCall" => Some(
+                [self.server.as_deref(), self.tool.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("."),
+            ),
+            "dynamicToolCall" => Some(
+                [self.namespace.as_deref(), self.tool.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("."),
+            ),
+            "collabAgentToolCall" => self.tool.clone(),
+            _ => None,
+        }
+        .filter(|name| !name.is_empty())
+    }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppServerResult {
+    /// Thread created by a successful thread/start response.
     thread: Option<AppServerThread>,
+    /// Model resolved by a successful account or thread response.
     model: Option<String>,
+    /// Reasoning effort resolved by a successful account or thread response.
     reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct AppServerThread {
+    /// Stable thread identifier assigned by Codex App Server.
     id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CodexRuntimeDefaults {
+    /// Temporary thread identifier used while resolving runtime defaults.
     thread_id: String,
+    /// Model selected by App Server for the temporary thread.
     model: String,
+    /// Reasoning effort selected by App Server for the temporary thread.
     reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CodexRuntimeSettings {
+    /// Effective model after merging explicit configuration and App Server defaults.
     model: String,
+    /// Effective reasoning effort after merging configuration layers.
     reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct CodexConfigLayer {
+    /// Model explicitly configured in this TOML layer.
     model: Option<String>,
+    /// Reasoning effort explicitly configured in this TOML layer.
     model_reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 struct CachedCodexRuntimeDefaults {
+    /// Cache revision at which the runtime settings were resolved.
     revision: u64,
+    /// Effective runtime settings retained for the matching revision.
     value: CodexRuntimeSettings,
 }
 
 #[derive(Debug, Default)]
 struct CodexRuntimeDefaultsCacheState {
+    /// Indicates whether native file watching makes cached values safe to serve.
     enabled: AtomicBool,
+    /// Generation incremented whenever watched configuration may have changed.
     revision: AtomicU64,
+    /// Cached runtime settings paired with the generation that produced them.
     value: Mutex<Option<CachedCodexRuntimeDefaults>>,
 }
 
@@ -194,6 +283,7 @@ struct CodexRuntimeDefaultsCacheState {
 /// watching is unavailable, every probe resolves fresh defaults so the UI cannot become stale.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CodexRuntimeDefaultsCache {
+    /// Thread-safe state shared by every clone of the cache handle.
     state: Arc<CodexRuntimeDefaultsCacheState>,
 }
 
@@ -256,22 +346,30 @@ impl CodexRuntimeDefaultsCache {
 
 #[derive(Debug, Deserialize)]
 struct AppServerTurn {
+    /// Current turn lifecycle status reported by App Server.
     status: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct ThreadTokenUsage {
+    /// Most recent cumulative usage snapshot for the active turn.
     last: TokenUsageBreakdown,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TokenUsageBreakdown {
+    /// Total input and output tokens reported by Codex.
     total_tokens: u64,
+    /// All tokens included in model input.
     input_tokens: u64,
+    /// Input tokens served from an existing cache entry.
     cached_input_tokens: u64,
+    /// Input tokens written into the prompt cache.
     cache_write_input_tokens: u64,
+    /// Tokens generated in the model output.
     output_tokens: u64,
+    /// Output tokens consumed by model reasoning.
     reasoning_output_tokens: u64,
 }
 
@@ -288,7 +386,7 @@ impl From<TokenUsageBreakdown> for TokenUsage {
     }
 }
 
-fn resolve_codex_executable() -> Result<OsString, AppError> {
+fn find_usable_codex_executable() -> Result<OsString, AppError> {
     for executable in codex_executable_candidates() {
         match Command::new(&executable)
             .arg("--version")
@@ -503,6 +601,28 @@ fn collect_run_events(
                     collector.record_token_usage(usage.last.into());
                 }
             }
+            Some("item/started") => {
+                if let Some(item) = message.params.and_then(|params| params.item) {
+                    let elapsed = started_at.elapsed();
+                    // Reasoning is timed separately; all executable item kinds enter the tool list.
+                    if item.item_type == "reasoning" {
+                        collector.record_thinking_started(&item.id, elapsed);
+                    } else if let Some(name) = item.tool_name() {
+                        collector.record_tool_started(&item.id, &name, elapsed);
+                    }
+                }
+            }
+            Some("item/completed") => {
+                if let Some(item) = message.params.and_then(|params| params.item) {
+                    let elapsed = started_at.elapsed();
+                    // The stable item id prevents concurrent calls from being paired incorrectly.
+                    if item.item_type == "reasoning" {
+                        collector.record_thinking_finished(&item.id, elapsed);
+                    } else if item.tool_name().is_some() {
+                        collector.record_tool_finished(&item.id, elapsed);
+                    }
+                }
+            }
             Some("turn/completed") => {
                 let completed = message
                     .params
@@ -619,7 +739,12 @@ fn codex_executable_candidates() -> Vec<OsString> {
 
     #[cfg(target_os = "macos")]
     candidates.extend([
+        // OpenAI's troubleshooting guide documents this retained compatibility path for the
+        // Codex executable bundled with the ChatGPT desktop app:
+        // https://learn.chatgpt.com/docs/reference/troubleshooting.md
         OsString::from("/Applications/Codex.app/Contents/Resources/codex"),
+        // Current ChatGPT builds also place the executable here. Keep this as an observed fallback;
+        // the official guide above does not promise this internal bundle layout as a stable path.
         OsString::from("/Applications/ChatGPT.app/Contents/Resources/codex"),
     ]);
 
@@ -665,6 +790,28 @@ mod tests {
 
             assert_eq!(result, Err(AppError::CodexNeedsInput));
         }
+    }
+
+    #[test]
+    fn records_codex_reasoning_and_tool_item_lifecycles() {
+        let (sender, receiver) = mpsc::sync_channel(5);
+        for fixture in [
+            r#"{"method":"item/started","params":{"item":{"id":"reason-1","type":"reasoning"}}}"#,
+            r#"{"method":"item/completed","params":{"item":{"id":"reason-1","type":"reasoning"}}}"#,
+            r#"{"method":"item/started","params":{"item":{"id":"tool-1","type":"mcpToolCall","server":"github","tool":"search"}}}"#,
+            r#"{"method":"item/completed","params":{"item":{"id":"tool-1","type":"mcpToolCall","server":"github","tool":"search"}}}"#,
+            r#"{"method":"turn/completed","params":{"turn":{"status":"completed"}}}"#,
+        ] {
+            sender
+                .send(Ok(fixture.to_string()))
+                .expect("fixture should be queued");
+        }
+
+        let output = collect_run_events(&receiver, Instant::now())
+            .expect("valid item lifecycle should complete");
+
+        assert_eq!(output.metrics.tool_calls.len(), 1);
+        assert_eq!(output.metrics.tool_calls[0].name, "github.search");
     }
 
     #[test]

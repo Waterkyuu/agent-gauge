@@ -1,42 +1,127 @@
 @import "tailwindcss";
 @import "@heroui/styles";
 
+/* Ollama Tailwind CSS v4 theme */
 @theme {
-	--font-sans:
-		"SF Pro Text", "Segoe UI", ui-sans-serif, system-ui, -apple-system,
-		BlinkMacSystemFont, sans-serif;
-	--font-mono:
-		"SFMono-Regular", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
-}
-
-:root {
-	--app-canvas: #f2f2ef;
-	--app-surface: #fbfbfa;
-	--app-raised: #fdfdfc;
-	--app-ink: #181817;
-	--app-muted: #6d6d68;
-	--app-faint: #969690;
-	--app-line: #ddddd7;
-	--app-hover: #ecece8;
+	--color-primary: #000000;
+	--color-on-primary: #ffffff;
+	--color-ink: #000000;
+	--color-ink-deep: #090909;
+	--color-charcoal: #525252;
+	--color-body: #737373;
+	--color-mute: #a3a3a3;
+	--color-canvas: #ffffff;
+	--color-surface-soft: #fafafa;
+	--color-surface-card: #ffffff;
+	--color-hairline: #e5e5e5;
+	--color-hairline-strong: #d4d4d4;
+	--color-on-dark: #ffffff;
+	--color-on-dark-mute: rgba(255, 255, 255, 0.7);
+	--color-surface-dark: #171717;
+	--color-focus-ring: rgba(59, 130, 246, 0.5);
+	--color-link: #000000;
+	--color-link-mute: #737373;
+	--color-terminal-red: #ff5f56;
+	--color-terminal-yellow: #ffbd2e;
+	--color-terminal-green: #27c93f;
+	--font-primary: "SF Pro Rounded", system-ui, sans-serif;
+	--font-family-2: "ui-sans-serif", system-ui, sans-serif;
+	--font-family-3: "ui-monospace", system-ui, sans-serif;
+	--font-sans: var(--font-family-2);
+	--font-mono: var(--font-family-3);
+	--text-display-xl: 36px;
+	--leading-display-xl: 1.11;
+	--tracking-display-xl: 0;
+	--text-display-lg: 30px;
+	--leading-display-lg: 1.2;
+	--tracking-display-lg: 0;
+	--text-heading-lg: 24px;
+	--leading-heading-lg: 1.33;
+	--tracking-heading-lg: 0;
+	--text-heading-md: 20px;
+	--leading-heading-md: 1.4;
+	--tracking-heading-md: 0;
+	--text-heading-sm: 18px;
+	--leading-heading-sm: 1.56;
+	--tracking-heading-sm: 0;
+	--text-body-md: 16px;
+	--leading-body-md: 1.5;
+	--tracking-body-md: 0;
+	--text-body-strong: 16px;
+	--leading-body-strong: 1.5;
+	--tracking-body-strong: 0;
+	--text-body-sm: 14px;
+	--leading-body-sm: 1.43;
+	--tracking-body-sm: 0;
+	--text-body-sm-strong: 14px;
+	--leading-body-sm-strong: 1.43;
+	--tracking-body-sm-strong: 0;
+	--text-caption-sm: 12px;
+	--leading-caption-sm: 1.33;
+	--tracking-caption-sm: 0;
+	--text-code-md: 16px;
+	--leading-code-md: 1.5;
+	--tracking-code-md: 0;
+	--text-code-sm: 14px;
+	--leading-code-sm: 1.43;
+	--tracking-code-sm: 0;
+	--text-button-md: 14px;
+	--leading-button-md: 1;
+	--tracking-button-md: 0;
+	--spacing-xxs: 2px;
+	--spacing-xs: 4px;
+	--spacing-sm: 8px;
+	--spacing-md: 12px;
+	--spacing-lg: 16px;
+	--spacing-xl: 24px;
+	--spacing-xxl: 32px;
+	--spacing-section: 88px;
+	--radius-none: 0px;
+	--radius-sm: 6px;
+	--radius-md: 8px;
+	--radius-lg: 12px;
+	--radius-full: 9999px;
 }
 
 @layer base {
 	html {
-		background: var(--app-canvas);
-		color: var(--app-ink);
+		background: var(--color-canvas);
+		color: var(--color-ink);
 		color-scheme: light;
-		font-family: var(--font-sans);
+		font-family: var(--font-family-2);
 		font-synthesis: none;
 		text-rendering: optimizeLegibility;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
 	}
+
 	body {
 		margin: 0;
 		min-width: 320px;
 		min-height: 100vh;
-		background: var(--app-canvas);
+		background: var(--color-canvas);
 	}
+
+	* {
+		scrollbar-color: var(--color-hairline-strong) transparent;
+		scrollbar-width: thin;
+	}
+
+	::-webkit-scrollbar {
+		width: 6px;
+		height: 6px;
+	}
+
+	::-webkit-scrollbar-track {
+		margin: 6px;
+		background: transparent;
+	}
+
+	::-webkit-scrollbar-thumb {
+		border-radius: var(--radius-full);
+		background: var(--color-hairline-strong);
+	}
+
 	button,
 	input,
 	textarea,
@@ -45,7 +130,7 @@
 	}
 
 	::selection {
-		background: #272725;
-		color: #f7f7f4;
+		background: var(--color-primary);
+		color: var(--color-on-primary);
 	}
 }

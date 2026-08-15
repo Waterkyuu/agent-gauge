@@ -2,15 +2,21 @@ import {
 	CircleCheck,
 	CircleQuestion,
 	Clock,
+	LayoutColumns3,
+	LayoutRows3,
 	Play,
 	TriangleExclamation,
 } from "@gravity-ui/icons";
-import { Card } from "@heroui/react";
+import { Button, Card, Tooltip } from "@heroui/react";
 import { cn } from "cnfast";
-import type { ComponentType, SVGProps } from "react";
+import { type ComponentType, type SVGProps, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentLogo } from "@/components/agent-logo";
+import { SearchBox } from "@/components/ui/search-box";
 import { RUN_BOARD_ITEMS, type RunBoardStatus } from "@/constants/run-board";
+import { debounce } from "@/utils/common";
+
+type RunBoardLayout = "vertical" | "horizontal";
 
 type StatusPresentation = {
 	/** Icon rendered beside the status name. */
@@ -29,52 +35,140 @@ const BOARD_STATUSES: RunBoardStatus[] = [
 const STATUS_PRESENTATIONS: Record<RunBoardStatus, StatusPresentation> = {
 	running: {
 		icon: Play,
-		iconClassName: "text-blue-600",
+		iconClassName: "text-ink",
 	},
 	waiting: {
 		icon: CircleQuestion,
-		iconClassName: "text-amber-500",
+		iconClassName: "text-terminal-yellow",
 	},
 	finish: {
 		icon: CircleCheck,
-		iconClassName: "text-emerald-600",
+		iconClassName: "text-terminal-green",
 	},
 	error: {
 		icon: TriangleExclamation,
-		iconClassName: "text-rose-600",
+		iconClassName: "text-terminal-red",
 	},
 };
 
-/** Renders the four-state run board with localized mock runs. */
+/** Renders the searchable four-state run board with localized mock runs. */
 const RunBoardPage = () => {
 	const { t } = useTranslation();
+	const [layout, setLayout] = useState<RunBoardLayout>("vertical");
+	const [agentInput, setAgentInput] = useState("");
+	const [agentQuery, setAgentQuery] = useState("");
+	const agentSearchTerm = agentQuery.trim().toLocaleLowerCase();
+
+	// Applies only the latest agent input after the user pauses typing.
+	useEffect(() => {
+		const updateAgentQuery = debounce(setAgentQuery);
+
+		updateAgentQuery(agentInput);
+
+		return updateAgentQuery.cancel;
+	}, [agentInput]);
 
 	return (
 		<main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-			<header className="mb-5 border-b border-[var(--app-line)] pb-7">
-				<h1 className="text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-4xl">
-					{t("runBoard.title")}
-				</h1>
-				<p className="mt-3 max-w-[65ch] text-sm leading-6 text-[var(--app-muted)] sm:text-base">
-					{t("runBoard.description")}
-				</p>
+			<header className="mb-5 flex flex-col gap-5 border-b border-hairline pb-7 sm:flex-row sm:items-end sm:justify-between">
+				<div>
+					<h1 className="font-primary text-display-lg font-medium leading-display-lg sm:text-display-xl sm:leading-display-xl">
+						{t("runBoard.title")}
+					</h1>
+					<p className="mt-md max-w-[65ch] text-body-sm leading-body-md text-body sm:text-body-md">
+						{t("runBoard.description")}
+					</p>
+				</div>
+				<div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+					<div className="w-full sm:w-72">
+						<SearchBox
+							onValueChange={setAgentInput}
+							placeholder={t("runBoard.searchPlaceholder")}
+							value={agentInput}
+						/>
+					</div>
+					<fieldset
+						aria-label={t("runBoard.layoutSelection")}
+						className="flex shrink-0 items-center gap-xs self-start rounded-lg bg-surface-soft p-xs sm:self-auto"
+					>
+						<Tooltip delay={0}>
+							<Button
+								aria-pressed={layout === "vertical"}
+								aria-label={t("runBoard.verticalLayout")}
+								className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
+								onPress={() => setLayout("vertical")}
+								size="sm"
+								variant="ghost"
+							>
+								<LayoutColumns3 aria-hidden="true" className="size-4" />
+							</Button>
+							<Tooltip.Content
+								className="w-max max-w-none whitespace-nowrap break-normal"
+								placement="bottom"
+							>
+								{t("runBoard.verticalLayout")}
+							</Tooltip.Content>
+						</Tooltip>
+						<Tooltip delay={0}>
+							<Button
+								aria-pressed={layout === "horizontal"}
+								aria-label={t("runBoard.horizontalLayout")}
+								className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
+								onPress={() => setLayout("horizontal")}
+								size="sm"
+								variant="ghost"
+							>
+								<LayoutRows3 aria-hidden="true" className="size-4" />
+							</Button>
+							<Tooltip.Content
+								className="w-max max-w-none whitespace-nowrap break-normal"
+								placement="bottom"
+							>
+								{t("runBoard.horizontalLayout")}
+							</Tooltip.Content>
+						</Tooltip>
+					</fieldset>
+				</div>
 			</header>
 
-			<div className="grid overflow-hidden rounded-xl border border-[var(--app-line)] bg-[var(--app-surface)] lg:grid-cols-2 xl:min-h-[40rem] xl:grid-cols-4">
+			<div
+				className={cn(
+					"grid overflow-hidden rounded-xl border border-hairline bg-surface-card",
+					layout === "vertical" &&
+						"lg:grid-cols-2 xl:min-h-[40rem] xl:grid-cols-4",
+				)}
+				data-layout={layout}
+				data-testid="run-board"
+			>
 				{BOARD_STATUSES.map((status) => {
 					const presentation = STATUS_PRESENTATIONS[status];
 					const StatusIcon = presentation.icon;
 					const items = RUN_BOARD_ITEMS.filter(
-						(item) => item.status === status,
+						(item) =>
+							item.status === status &&
+							t(`agentNames.${item.agent}`)
+								.toLocaleLowerCase()
+								.includes(agentSearchTerm),
 					);
 
 					return (
 						<section
 							aria-labelledby={`board-${status}`}
-							className="flex min-w-0 flex-col border-b border-[var(--app-line)] lg:border-r lg:[&:nth-child(2n)]:border-r-0 lg:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-child(2n)]:border-r xl:[&:nth-child(4n)]:border-r-0 xl:[&:nth-last-child(-n+4)]:border-b-0"
+							className={cn(
+								"flex min-w-0 flex-col border-b border-hairline",
+								layout === "vertical" &&
+									"lg:border-r lg:[&:nth-child(2n)]:border-r-0 lg:[&:nth-last-child(-n+2)]:border-b-0 xl:[&:nth-child(2n)]:border-r xl:[&:nth-child(4n)]:border-r-0 xl:[&:nth-last-child(-n+4)]:border-b-0",
+								layout === "horizontal" && "lg:flex-row lg:last:border-b-0",
+							)}
 							key={status}
 						>
-							<header className="flex items-center border-b border-[var(--app-line)] px-4 py-3.5">
+							<header
+								className={cn(
+									"flex items-center border-b border-hairline px-4 py-3.5",
+									layout === "horizontal" &&
+										"lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r",
+								)}
+							>
 								<div className="flex min-w-0 items-center gap-3">
 									<StatusIcon
 										aria-hidden="true"
@@ -85,44 +179,54 @@ const RunBoardPage = () => {
 									/>
 									<div className="min-w-0">
 										<h2
-											className="text-sm font-semibold"
+											className="text-body-sm-strong font-medium"
 											id={`board-${status}`}
 										>
 											{t(`runBoard.status.${status}`)}
 										</h2>
-										<p className="truncate text-[11px] text-[var(--app-muted)]">
+										<p className="truncate text-caption-sm text-body">
 											{t(`runBoard.statusDescription.${status}`)}
 										</p>
 									</div>
 								</div>
 							</header>
 
-							<div className="min-h-48 flex-1 space-y-3 bg-[color:var(--app-canvas)]/45 p-3">
+							<div
+								className={cn(
+									"min-h-48 flex-1 space-y-3 bg-surface-soft/50 p-3",
+									layout === "horizontal" &&
+										"lg:flex lg:flex-wrap lg:items-start lg:gap-3 lg:space-y-0",
+								)}
+							>
 								{items.length > 0 ? (
 									items.map((item) => (
 										<Card
-											className="rounded-xl border border-[var(--app-line)] bg-[var(--app-raised)] shadow-none transition-colors hover:border-zinc-400"
+											className={cn(
+												"h-48 w-[18rem] max-w-full overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-none transition-colors hover:border-hairline-strong",
+											)}
 											key={item.id}
 											role="article"
 										>
-											<Card.Content className="p-4">
-												<div className="flex items-center justify-between gap-3 text-[11px] text-[var(--app-faint)]">
+											<Card.Content className="p-3">
+												<div className="flex items-center justify-between gap-3 text-caption-sm text-mute">
 													<span className="font-mono">{item.id}</span>
-													<span className="flex items-center gap-1.5">
+													<span className="flex min-w-0 max-w-[55%] items-center gap-1.5 truncate">
 														<AgentLogo
 															agent={item.agent}
 															className="size-3.5"
 														/>
-														{t(`agentNames.${item.agent}`)}
+														<span className="truncate">
+															{t(`agentNames.${item.agent}`)}
+														</span>
 													</span>
 												</div>
-												<h3 className="mt-4 text-sm font-semibold tracking-[-0.015em]">
+												<h3 className="mt-3 line-clamp-2 overflow-hidden text-body-sm-strong font-medium">
 													{t(item.titleKey)}
 												</h3>
-												<p className="mt-1.5 text-xs leading-5 text-[var(--app-muted)]">
+												<p className="mt-1 line-clamp-2 overflow-hidden text-caption-sm leading-body-sm text-body">
 													{t(item.descriptionKey)}
 												</p>
-												<div className="mt-4 flex items-center justify-between border-t border-[var(--app-line)] pt-3 font-mono text-[11px] text-[var(--app-faint)]">
+												<div className="mt-3 flex items-center justify-between border-t border-hairline pt-2 font-mono text-caption-sm text-mute">
 													<span>{item.time}</span>
 													<span className="flex items-center gap-1.5">
 														<Clock aria-hidden="true" className="size-3.5" />
@@ -133,8 +237,10 @@ const RunBoardPage = () => {
 										</Card>
 									))
 								) : (
-									<p className="px-4 py-10 text-center text-xs text-[var(--app-muted)]">
-										{t("runBoard.empty")}
+									<p className="px-4 py-10 text-center text-caption-sm text-body">
+										{agentSearchTerm
+											? t("runBoard.noSearchResults")
+											: t("runBoard.empty")}
 									</p>
 								)}
 							</div>

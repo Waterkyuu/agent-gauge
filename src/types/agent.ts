@@ -37,6 +37,15 @@ type TokenUsage = {
 	reasoningOutputTokens: number | null;
 };
 
+type ToolCallMetric = {
+	/** One-based start order within the current Agent task. */
+	sequence: number;
+	/** Stable tool name supplied by the source Agent protocol. */
+	name: string;
+	/** Wall-clock duration between the tool request and matching result. */
+	durationMs: number;
+};
+
 type AgentRunResult = {
 	/** Incrementally assembled assistant response. */
 	response: string;
@@ -46,6 +55,12 @@ type AgentRunResult = {
 	timeToFirstTokenMs: number | null;
 	/** Token usage reported for this task. */
 	tokenUsage: TokenUsage | null;
+	/** Sum of explicit reasoning or thinking intervals in milliseconds. */
+	thinkingDurationMs: number;
+	/** Number of tools invoked during this task. */
+	toolCallCount: number;
+	/** Tool invocations retained in source start order. */
+	toolCalls: ToolCallMetric[];
 };
 
 export type {
@@ -54,4 +69,5 @@ export type {
 	AgentRunResult,
 	AgentRuntimeStatus,
 	TokenUsage,
+	ToolCallMetric,
 };

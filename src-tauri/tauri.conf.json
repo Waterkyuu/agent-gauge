@@ -1,6 +1,6 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "AgentGauge",
+	"productName": "Theoria",
 	"version": "0.1.0",
 	"identifier": "com.agentgauge.desktop",
 	"build": {
@@ -12,7 +12,15 @@
 	"app": {
 		"windows": [
 			{
-				"title": "AgentGauge",
+				"title": "Theoria",
+				"theme": "Light",
+				"decorations": true,
+				"titleBarStyle": "Overlay",
+				"trafficLightPosition": {
+					"x": 14,
+					"y": 20
+				},
+				"hiddenTitle": true,
 				"width": 1120,
 				"height": 720,
 				"minWidth": 840,

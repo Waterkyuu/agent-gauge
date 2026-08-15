@@ -1,5 +1,6 @@
 import { CircleCheck, Clock, TriangleExclamation } from "@gravity-ui/icons";
 import { Skeleton } from "@heroui/react";
+import { cn } from "cnfast";
 import { useTranslation } from "react-i18next";
 import { AgentLogo } from "@/components/agent-logo";
 import type { AgentKind, AgentRunResult } from "@/types/agent";
@@ -17,6 +18,9 @@ type AgentComparisonCardProps = {
 	numberLocale: string;
 };
 
+const TOOL_DURATION_WARNING_MS = 20_000;
+const TOOL_DURATION_CRITICAL_MS = 60_000;
+
 /**
  * Formats a measured latency without hiding sub-second precision.
  *
@@ -28,6 +32,22 @@ const formatDuration = (milliseconds: number) => {
 		return `${milliseconds} ms`;
 	}
 	return `${(milliseconds / 1000).toFixed(2)} s`;
+};
+
+/**
+ * Highlights long tool calls using duration-only severity tones.
+ *
+ * @example
+ * getToolDurationTone(21_000); // "bg-terminal-yellow/20 text-ink"
+ */
+const getToolDurationTone = (milliseconds: number) => {
+	if (milliseconds > TOOL_DURATION_CRITICAL_MS) {
+		return "bg-terminal-red/15 text-ink";
+	}
+	if (milliseconds > TOOL_DURATION_WARNING_MS) {
+		return "bg-terminal-yellow/20 text-ink";
+	}
+	return "text-body";
 };
 
 /**
@@ -49,49 +69,57 @@ const AgentComparisonCard = ({
 	return (
 		<article
 			aria-labelledby={titleId}
-			className="min-w-0 border-b border-[var(--app-line)] p-5 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0"
+			className="min-w-0 border-b border-hairline p-xl last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0"
 		>
 			<header className="flex min-h-7 items-center justify-between gap-3">
 				<div className="flex min-w-0 items-center gap-2.5">
 					<AgentLogo agent={agent} className="size-5" />
-					<h3 className="truncate text-sm font-semibold" id={titleId}>
+					<h3 className="truncate text-body-sm-strong font-medium" id={titleId}>
 						{t("comparisonResult", { agent: t(`agentNames.${agent}`) })}
 					</h3>
 				</div>
 				{isRunning ? (
-					<span className="flex items-center gap-1.5 text-xs text-[var(--app-muted)]">
+					<span className="flex items-center gap-sm text-caption-sm text-body">
 						<Clock aria-hidden="true" className="size-3.5" />
 						{t("agentRunRunning")}
 					</span>
 				) : result ? (
 					<CircleCheck
 						aria-hidden="true"
-						className="size-[18px] text-[var(--app-muted)]"
+						className="size-[18px] text-terminal-green"
 					/>
 				) : null}
 			</header>
 
 			{isRunning ? (
 				<div className="mt-5" aria-label={t("agentRunRunning")} role="status">
-					<div className="grid grid-cols-3 gap-4 border-y border-[var(--app-line)] py-4">
+					<div className="grid grid-cols-3 gap-lg border-y border-hairline py-lg">
 						{[0, 1, 2].map((item) => (
 							<div key={item}>
-								<Skeleton className="h-2 w-14 rounded" />
-								<Skeleton className="mt-3 h-4 w-12 rounded" />
+								<Skeleton className="h-2 w-14 rounded-full" />
+								<Skeleton className="mt-md h-4 w-12 rounded-full" />
 							</div>
 						))}
 					</div>
-					<div className="mt-5 space-y-2">
-						<Skeleton className="h-3 w-full rounded" />
-						<Skeleton className="h-3 w-5/6 rounded" />
-						<Skeleton className="h-3 w-2/3 rounded" />
+					<div className="grid grid-cols-2 gap-lg border-b border-hairline py-lg">
+						{[0, 1].map((item) => (
+							<div key={item}>
+								<Skeleton className="h-2 w-14 rounded-full" />
+								<Skeleton className="mt-md h-4 w-12 rounded-full" />
+							</div>
+						))}
+					</div>
+					<div className="mt-xl space-y-sm">
+						<Skeleton className="h-3 w-full rounded-full" />
+						<Skeleton className="h-3 w-5/6 rounded-full" />
+						<Skeleton className="h-3 w-2/3 rounded-full" />
 					</div>
 				</div>
 			) : null}
 
 			{errorMessage ? (
 				<div
-					className="mt-5 flex gap-3 rounded-lg border border-[var(--app-line)] bg-[var(--app-hover)] p-4 text-sm text-[var(--app-muted)]"
+					className="mt-xl flex gap-md rounded-lg border border-terminal-red/30 bg-terminal-red/10 p-lg text-body-sm text-charcoal"
 					role="alert"
 				>
 					<TriangleExclamation
@@ -103,8 +131,8 @@ const AgentComparisonCard = ({
 			) : null}
 
 			{result ? (
-				<div className="mt-5">
-					<div className="grid grid-cols-3 gap-4 border-y border-[var(--app-line)] py-4">
+				<div className="mt-xl">
+					<div className="grid grid-cols-3 gap-lg border-y border-hairline py-lg">
 						{[
 							[
 								t("firstToken"),
@@ -120,25 +148,23 @@ const AgentComparisonCard = ({
 							],
 						].map(([label, value]) => (
 							<div className="min-w-0" key={label}>
-								<p className="truncate text-[11px] text-[var(--app-faint)]">
-									{label}
-								</p>
-								<p className="mt-1.5 font-mono text-sm font-semibold tabular-nums">
+								<p className="truncate text-caption-sm text-mute">{label}</p>
+								<p className="mt-sm font-mono text-body-sm font-medium tabular-nums">
 									{value}
 								</p>
 							</div>
 						))}
 					</div>
 					{result.tokenUsage ? (
-						<div className="mt-4 grid grid-cols-3 gap-3 text-[11px]">
+						<div className="mt-lg grid grid-cols-3 gap-md text-caption-sm">
 							{[
 								[t("inputTokens"), result.tokenUsage.inputTokens],
 								[t("outputTokens"), result.tokenUsage.outputTokens],
 								[t("reasoningTokens"), result.tokenUsage.reasoningOutputTokens],
 							].map(([label, value]) => (
 								<div key={label}>
-									<p className="text-[var(--app-faint)]">{label}</p>
-									<p className="mt-1 font-mono font-medium text-[var(--app-muted)] tabular-nums">
+									<p className="text-mute">{label}</p>
+									<p className="mt-xs font-mono font-medium text-body tabular-nums">
 										{typeof value === "number"
 											? value.toLocaleString(numberLocale)
 											: t("metricUnavailable")}
@@ -147,11 +173,66 @@ const AgentComparisonCard = ({
 							))}
 						</div>
 					) : null}
-					<div className="mt-5">
-						<p className="mb-2 text-xs font-medium text-[var(--app-muted)]">
+					<dl className="mt-lg grid grid-cols-2 gap-lg border-t border-hairline pt-lg">
+						<div>
+							<dt className="text-caption-sm text-mute">
+								{t("thinkingDuration")}
+							</dt>
+							<dd className="mt-xs font-mono text-body-sm font-medium tabular-nums">
+								{formatDuration(result.thinkingDurationMs)}
+							</dd>
+						</div>
+						<div>
+							<dt className="text-caption-sm text-mute">
+								{t("toolCallCount")}
+							</dt>
+							<dd className="mt-xs font-mono text-body-sm font-medium tabular-nums">
+								{result.toolCallCount.toLocaleString(numberLocale)}
+							</dd>
+						</div>
+					</dl>
+					<section className="mt-xl" aria-labelledby={`${titleId}-tools`}>
+						<h4
+							className="mb-sm text-caption-sm font-medium text-charcoal"
+							id={`${titleId}-tools`}
+						>
+							{t("toolCallsTitle")}
+						</h4>
+						{result.toolCalls.length > 0 ? (
+							<ol className="overflow-hidden rounded-lg border border-hairline bg-canvas">
+								{result.toolCalls.map((toolCall) => {
+									const duration = formatDuration(toolCall.durationMs);
+									return (
+										<li
+											className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-md border-b border-hairline px-md py-sm last:border-b-0"
+											key={toolCall.sequence}
+										>
+											<span className="truncate font-mono text-caption-sm font-medium">
+												{toolCall.name}
+											</span>
+											<span
+												className={cn(
+													"rounded-full px-sm py-xxs font-mono text-caption-sm font-medium tabular-nums",
+													getToolDurationTone(toolCall.durationMs),
+												)}
+											>
+												{duration}
+											</span>
+										</li>
+									);
+								})}
+							</ol>
+						) : (
+							<p className="rounded-lg border border-dashed border-hairline px-md py-md text-caption-sm text-mute">
+								{t("noToolCalls")}
+							</p>
+						)}
+					</section>
+					<div className="mt-xl">
+						<p className="mb-sm text-caption-sm font-medium text-charcoal">
 							{t("responseTitle")}
 						</p>
-						<pre className="m-0 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--app-line)] bg-[var(--app-canvas)] p-4 font-mono text-xs leading-6 text-[var(--app-ink)]">
+						<pre className="m-0 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-hairline bg-surface-soft p-lg font-mono text-caption-sm leading-code-sm text-ink">
 							{result.response}
 						</pre>
 					</div>

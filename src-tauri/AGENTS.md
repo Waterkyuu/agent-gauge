@@ -83,8 +83,10 @@ application runtime.
 
 - Follow standard Rust naming: `snake_case` for modules, functions, and variables;
   `UpperCamelCase` for types and traits; `SCREAMING_SNAKE_CASE` for constants.
-- Prefer precise domain names such as `collect_run_events` or `resolve_agent_process`. Avoid generic
-  names such as `handle_data`, `process_item`, `manager`, or `helper`.
+- Name functions and variables after their concrete operation or stored value. The words `resolve`
+  and `normalized` are prohibited in function and variable names. Use precise alternatives such as
+  `find`, `parse`, `load`, `map`, `validate`, `collect`, or a domain-specific state name. For
+  example, use `find_usable_codex_executable`, not `resolve_codex_executable`.
 - Use the narrowest visibility. Prefer private items, then `pub(crate)`. Use `pub` only for a real
   crate boundary or a Tauri command that must be public from a separate command module.
 - Do not use wildcard imports except in an explicitly designed prelude or a test module where the
@@ -116,6 +118,8 @@ application runtime.
 - Use early returns to keep the main execution path readable.
 - Avoid boolean parameters when an enum communicates intent more clearly.
 - Comments explain why a decision or invariant exists, not what the syntax does.
+- Every field in a `struct` must have a field-level `///` documentation comment, including named
+  and tuple fields in private, protocol, DTO, and test-only structs.
 - Add rustdoc to public domain types, public traits, reusable APIs, and non-obvious command contracts.
   Include examples when they clarify intended usage.
 

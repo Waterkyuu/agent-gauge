@@ -1,5 +1,5 @@
 use crate::adapters::agent::AgentAdapter;
-use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
+use crate::domain::agent_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
 use leveldb_forensic::{decode_local_storage, LocalStorageRecord};
 use serde::Deserialize;
@@ -24,8 +24,11 @@ const JSON_RPC_METHOD_NOT_FOUND_CODE: i64 = -32601;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkBuddyGlobalSelection {
+    /// Model identifier selected for newly created WorkBuddy tasks.
     id: String,
+    /// Indicates whether thinking is enabled for the selected model.
     is_thinking: bool,
+    /// Explicit thinking effort selected when WorkBuddy supplies one.
     reasoning_effort: Option<String>,
 }
 
@@ -136,10 +139,15 @@ fn read_workbuddy_global_selection() -> Option<WorkBuddyGlobalSelection> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkBuddyAuthentication {
+    /// Indicates whether a usable WorkBuddy application or CLI was found locally.
     pub(crate) installed: bool,
+    /// Indicates whether WorkBuddy accepted an authenticated ACP session.
     pub(crate) logged_in: bool,
+    /// Safe authentication mode derived from the ACP user response.
     pub(crate) authentication_method: Option<String>,
+    /// Effective model selected for newly created WorkBuddy tasks.
     pub(crate) model: Option<String>,
+    /// Effective reasoning effort selected for newly created WorkBuddy tasks.
     pub(crate) reasoning_effort: Option<String>,
 }
 
@@ -183,94 +191,151 @@ impl AgentAdapter for SystemWorkBuddyAdapter {
 
 #[derive(Debug, Deserialize)]
 struct StreamMessage {
+    /// Top-level WorkBuddy stream message discriminator.
     #[serde(rename = "type")]
     message_type: String,
+    /// Optional subtype that refines result and control messages.
     subtype: Option<String>,
+    /// Low-level streaming event carried by this message.
     event: Option<StreamEvent>,
+    /// Final assistant response carried by a result message.
     result: Option<String>,
+    /// Token usage carried by a result message.
     usage: Option<StreamUsage>,
+    /// Indicates whether a result message represents a failed task.
     is_error: Option<bool>,
+    /// Full conversation message carried by an assistant message event.
+    message: Option<StreamConversationMessage>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamEvent {
+    /// Low-level event discriminator from the WorkBuddy streaming protocol.
     #[serde(rename = "type")]
     event_type: String,
+    /// Content block announced by a block-start event.
     content_block: Option<StreamContentBlock>,
+    /// Incremental content carried by a block-delta event.
     delta: Option<StreamDelta>,
+    /// Source content-block position associated with the event.
+    index: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamContentBlock {
+    /// Content-block discriminator such as thinking or tool_use.
     #[serde(rename = "type")]
     block_type: String,
+    /// Tool name when the block represents a tool invocation.
     name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+struct StreamConversationMessage {
+    /// Full assistant/user content emitted between low-level stream events.
+    #[serde(default)]
+    content: Vec<StreamConversationContent>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamConversationContent {
+    /// Content discriminator such as tool_use or tool_result.
+    #[serde(rename = "type")]
+    content_type: String,
+    /// Unique identifier present on a tool_use block.
+    id: Option<String>,
+    /// Tool name present on a tool_use block.
+    name: Option<String>,
+    /// Identifier that links a tool_result back to its tool_use block.
+    tool_use_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct StreamDelta {
+    /// Delta discriminator that identifies the incremental content kind.
     #[serde(rename = "type")]
     delta_type: Option<String>,
+    /// Incremental assistant text when supplied by the delta.
     text: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamUsage {
+    /// Non-cache input tokens reported for the task.
     input_tokens: u64,
+    /// Tokens generated in the model output.
     output_tokens: u64,
+    /// Input tokens written into WorkBuddy's prompt cache.
     #[serde(default)]
     cache_creation_input_tokens: u64,
+    /// Input tokens served from WorkBuddy's prompt cache.
     #[serde(default)]
     cache_read_input_tokens: u64,
 }
 
 #[derive(Debug, Deserialize)]
 struct AcpMessage {
+    /// JSON-RPC response identifier.
     id: Option<u64>,
+    /// Successful ACP response payload.
     result: Option<AcpResult>,
+    /// Structured ACP failure payload.
     error: Option<AcpError>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpResult {
+    /// Session identifier returned after successful ACP initialization.
     session_id: Option<String>,
+    /// Available and currently selected ACP models.
     models: Option<AcpModels>,
+    /// Runtime configuration choices exposed by WorkBuddy.
     config_options: Option<Vec<AcpConfigOption>>,
+    /// Authenticated user information returned by ACP.
     user_info: Option<AcpUserInfo>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpUserInfo {
+    /// Stable user identifier proving that ACP returned an authenticated account.
     user_id: String,
+    /// Authentication type reported for the current account.
     auth_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpModels {
+    /// Models that the current ACP session can select.
     #[serde(default)]
     available_models: Vec<AcpModel>,
+    /// Identifier of the model selected for the current ACP session.
     current_model_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpModel {
+    /// Stable identifier used to select the model through ACP.
     model_id: String,
+    /// User-visible model label reported by WorkBuddy.
     name: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpConfigOption {
+    /// Stable identifier of the configurable runtime option.
     id: String,
+    /// Value selected for this runtime option.
     current_value: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct AcpError {
+    /// JSON-RPC error code returned by WorkBuddy ACP.
     code: i64,
 }
 
@@ -392,7 +457,56 @@ fn collect_workbuddy_events(
         let message: StreamMessage =
             serde_json::from_str(&line).map_err(|_| AppError::WorkBuddyProtocolFailed)?;
 
+        if message.message_type == "assistant" {
+            // WorkBuddy mirrors the stream-json tool lifecycle but keeps its own collector state.
+            for content in message
+                .message
+                .map(|message| message.content)
+                .unwrap_or_default()
+            {
+                if content.content_type == "tool_use" {
+                    if content.name.as_deref() == Some("AskUserQuestion") {
+                        return Err(AppError::WorkBuddyNeedsInput);
+                    }
+                    if let (Some(id), Some(name)) = (content.id, content.name) {
+                        collector.record_tool_started(&id, &name, started_at.elapsed());
+                    }
+                }
+            }
+            continue;
+        }
+
+        if message.message_type == "user" {
+            // A tool_result closes only the matching tool_use id, including concurrent calls.
+            for content in message
+                .message
+                .map(|message| message.content)
+                .unwrap_or_default()
+            {
+                if content.content_type == "tool_result" {
+                    if let Some(id) = content.tool_use_id {
+                        collector.record_tool_finished(&id, started_at.elapsed());
+                    }
+                }
+            }
+            continue;
+        }
+
         if message.message_type == "stream_event" {
+            if let Some(event) = message.event.as_ref() {
+                // Thinking blocks use stream indexes because they have no tool-style identifier.
+                let interval_id = format!("thinking-{}", event.index.unwrap_or(0));
+                if event.event_type == "content_block_start"
+                    && event
+                        .content_block
+                        .as_ref()
+                        .is_some_and(|block| block.block_type == "thinking")
+                {
+                    collector.record_thinking_started(&interval_id, started_at.elapsed());
+                } else if event.event_type == "content_block_stop" {
+                    collector.record_thinking_finished(&interval_id, started_at.elapsed());
+                }
+            }
             if message
                 .event
                 .as_ref()
@@ -713,7 +827,7 @@ mod tests {
         build_workbuddy_task_command, collect_workbuddy_events,
         global_selection_from_local_storage, AcpMessage, StreamUsage,
     };
-    use crate::domain::codex_run::TokenUsage;
+    use crate::domain::agent_run::TokenUsage;
     use leveldb_forensic::{Encoding, LocalStorageRecord, StorageValue};
     use std::sync::mpsc;
     use std::time::Instant;
@@ -759,6 +873,28 @@ mod tests {
             output.metrics.token_usage.map(|usage| usage.total_tokens),
             Some(12)
         );
+    }
+
+    #[test]
+    fn records_workbuddy_thinking_and_tool_use_messages() {
+        let (sender, receiver) = mpsc::sync_channel(5);
+        for fixture in [
+            r#"{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"thinking"}}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_stop","index":0}}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Bash"}]}}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1"}]}}"#,
+            r#"{"type":"result","subtype":"success","is_error":false,"result":"OK"}"#,
+        ] {
+            sender
+                .send(Ok(fixture.to_string()))
+                .expect("fixture should be queued");
+        }
+
+        let output = collect_workbuddy_events(&receiver, Instant::now())
+            .expect("valid tool lifecycle should complete");
+
+        assert_eq!(output.metrics.tool_calls.len(), 1);
+        assert_eq!(output.metrics.tool_calls[0].name, "Bash");
     }
 
     #[test]

@@ -11,6 +11,7 @@ pub(crate) enum CodexConfigWatchEvent {
 
 /// Owns the native watcher so its operating-system subscriptions live for the application lifetime.
 pub(crate) struct CodexConfigWatcher {
+    /// Live watcher handle retained to keep all operating-system subscriptions active.
     _watcher: Mutex<RecommendedWatcher>,
 }
 
