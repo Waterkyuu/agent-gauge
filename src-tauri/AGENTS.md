@@ -83,8 +83,10 @@ application runtime.
 
 - Follow standard Rust naming: `snake_case` for modules, functions, and variables;
   `UpperCamelCase` for types and traits; `SCREAMING_SNAKE_CASE` for constants.
-- Prefer precise domain names such as `collect_run_events` or `resolve_agent_process`. Avoid generic
-  names such as `handle_data`, `process_item`, `manager`, or `helper`.
+- Name functions after their concrete operation and result. Do not use catch-all verbs such as
+  `handle`, `process`, `manage`, or `resolve` when a precise verb such as `find`, `parse`, `load`,
+  `map`, `validate`, or `collect` describes the behavior. For example, use
+  `find_usable_codex_executable`, not `resolve_codex_executable`.
 - Use the narrowest visibility. Prefer private items, then `pub(crate)`. Use `pub` only for a real
   crate boundary or a Tauri command that must be public from a separate command module.
 - Do not use wildcard imports except in an explicitly designed prelude or a test module where the

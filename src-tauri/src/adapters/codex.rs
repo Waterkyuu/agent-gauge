@@ -126,7 +126,7 @@ impl CodexAdapter for SystemCodexAdapter {
 
 impl AgentAdapter for SystemCodexAdapter {
     fn run_task(&self, query: &str) -> Result<AgentRunOutput, AppError> {
-        let executable = resolve_codex_executable()?;
+        let executable = find_usable_codex_executable()?;
         with_app_server(&executable, |stdin, event_receiver| {
             run_app_server_task(stdin, event_receiver, query)
         })
@@ -371,7 +371,7 @@ impl From<TokenUsageBreakdown> for TokenUsage {
     }
 }
 
-fn resolve_codex_executable() -> Result<OsString, AppError> {
+fn find_usable_codex_executable() -> Result<OsString, AppError> {
     for executable in codex_executable_candidates() {
         match Command::new(&executable)
             .arg("--version")
