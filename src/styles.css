@@ -102,6 +102,26 @@
 		background: var(--color-canvas);
 	}
 
+	* {
+		scrollbar-color: var(--color-hairline-strong) transparent;
+		scrollbar-width: thin;
+	}
+
+	::-webkit-scrollbar {
+		width: 6px;
+		height: 6px;
+	}
+
+	::-webkit-scrollbar-track {
+		margin: 6px;
+		background: transparent;
+	}
+
+	::-webkit-scrollbar-thumb {
+		border-radius: var(--radius-full);
+		background: var(--color-hairline-strong);
+	}
+
 	button,
 	input,
 	textarea,
