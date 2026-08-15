@@ -46,6 +46,10 @@ src/
 
 ## Coding Rules
 
+
+### UI / UX Design
+@DESIGN.md
+
 ### Avoid Redundant Type Guards
 
 1. Do not write large numbers of unnecessary type guards that make maintenance difficult. Handle responses strictly according to their declared types.
