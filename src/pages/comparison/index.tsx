@@ -347,12 +347,10 @@ const ComparisonPage = () => {
 
 		refreshProcessesAfterLoginRef.current = refreshAgentProcesses;
 		refreshAgentProcesses();
-		const intervalId = window.setInterval(refreshAgentProcesses, 1000);
 
 		return () => {
 			isActive = false;
 			refreshProcessesAfterLoginRef.current = () => {};
-			window.clearInterval(intervalId);
 		};
 	}, []);
 
