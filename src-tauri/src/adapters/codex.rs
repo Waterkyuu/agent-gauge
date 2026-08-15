@@ -724,7 +724,12 @@ fn codex_executable_candidates() -> Vec<OsString> {
 
     #[cfg(target_os = "macos")]
     candidates.extend([
+        // OpenAI's troubleshooting guide documents this retained compatibility path for the
+        // Codex executable bundled with the ChatGPT desktop app:
+        // https://learn.chatgpt.com/docs/reference/troubleshooting.md
         OsString::from("/Applications/Codex.app/Contents/Resources/codex"),
+        // Current ChatGPT builds also place the executable here. Keep this as an observed fallback;
+        // the official guide above does not promise this internal bundle layout as a stable path.
         OsString::from("/Applications/ChatGPT.app/Contents/Resources/codex"),
     ]);
 
