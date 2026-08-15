@@ -1,4 +1,4 @@
-use crate::domain::codex_run::{AgentRunMetrics, AgentRunOutput, TokenUsage};
+use crate::domain::agent_run::{AgentRunMetrics, AgentRunOutput, TokenUsage};
 use serde::Serialize;
 
 /// Token consumption reported for one completed Agent task.
@@ -102,7 +102,7 @@ fn duration_millis(duration: std::time::Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::AgentRunResponse;
-    use crate::domain::codex_run::{AgentRunMetrics, AgentRunOutput, ToolCallMetric};
+    use crate::domain::agent_run::{AgentRunMetrics, AgentRunOutput, ToolCallMetric};
     use std::time::Duration;
 
     #[test]

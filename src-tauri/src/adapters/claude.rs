@@ -1,5 +1,5 @@
 use crate::adapters::agent::AgentAdapter;
-use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
+use crate::domain::agent_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
 use crate::platform::claude_config::claude_settings_path;
 use serde::Deserialize;
@@ -618,7 +618,7 @@ mod tests {
         authentication_from_status, collect_claude_events, runtime_settings_from_json,
         ClaudeRuntimeSettingsCache, StreamUsage,
     };
-    use crate::domain::codex_run::TokenUsage;
+    use crate::domain::agent_run::TokenUsage;
     use std::sync::mpsc;
     use std::time::Instant;
 

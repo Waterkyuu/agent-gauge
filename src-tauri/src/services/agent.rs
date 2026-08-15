@@ -1,5 +1,5 @@
 use crate::adapters::agent::AgentAdapter;
-use crate::domain::codex_run::AgentRunOutput;
+use crate::domain::agent_run::AgentRunOutput;
 use crate::error::AppError;
 
 /// Runs one local agent task after enforcing the bounded query contract.
@@ -18,7 +18,7 @@ pub(crate) fn run_agent_task(
 mod tests {
     use super::run_agent_task;
     use crate::adapters::agent::AgentAdapter;
-    use crate::domain::codex_run::AgentRunOutput;
+    use crate::domain::agent_run::AgentRunOutput;
     use crate::error::AppError;
 
     struct FakeAgentAdapter;

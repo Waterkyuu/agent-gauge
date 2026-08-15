@@ -1,5 +1,5 @@
 use crate::adapters::agent::AgentAdapter;
-use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
+use crate::domain::agent_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
 use crate::platform::codex_config::codex_config_paths;
 use serde::Deserialize;

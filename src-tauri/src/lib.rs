@@ -18,7 +18,7 @@ mod dto {
     pub(crate) mod workbuddy;
 }
 mod domain {
-    pub(crate) mod codex_run;
+    pub(crate) mod agent_run;
 }
 mod error;
 mod platform {

@@ -1,5 +1,5 @@
 use crate::adapters::agent::AgentAdapter;
-use crate::domain::codex_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
+use crate::domain::agent_run::{AgentRunMetricsCollector, AgentRunOutput, TokenUsage};
 use crate::error::AppError;
 use leveldb_forensic::{decode_local_storage, LocalStorageRecord};
 use serde::Deserialize;
@@ -784,7 +784,7 @@ mod tests {
         build_workbuddy_task_command, collect_workbuddy_events,
         global_selection_from_local_storage, AcpMessage, StreamUsage,
     };
-    use crate::domain::codex_run::TokenUsage;
+    use crate::domain::agent_run::TokenUsage;
     use leveldb_forensic::{Encoding, LocalStorageRecord, StorageValue};
     use std::sync::mpsc;
     use std::time::Instant;
