@@ -6,6 +6,10 @@ const zhCN = {
 		collapseSidebar: "收起侧边栏",
 		expandSidebar: "展开侧边栏",
 		loadingPage: "正在加载页面",
+		common: {
+			search: "搜索",
+			clearSearch: "清除搜索",
+		},
 		navigation: {
 			compare: "性能对比",
 			runs: "运行看板",
@@ -75,6 +79,8 @@ const zhCN = {
 			title: "Agent 运行看板",
 			description:
 				"按状态追踪本地 Agent 任务，查看正在执行、等待回答、已完成和异常中断的工作。",
+			searchPlaceholder: "搜索 Agent 产品",
+			noSearchResults: "没有匹配的 Agent 任务。",
 			layoutSelection: "切换看板布局",
 			verticalLayout: "竖面板",
 			horizontalLayout: "水平面板",

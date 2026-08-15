@@ -12,6 +12,7 @@ import { cn } from "cnfast";
 import { type ComponentType, type SVGProps, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentLogo } from "@/components/agent-logo";
+import { SearchBox } from "@/components/ui/search-box";
 import { RUN_BOARD_ITEMS, type RunBoardStatus } from "@/constants/run-board";
 
 type RunBoardLayout = "vertical" | "horizontal";
@@ -49,10 +50,12 @@ const STATUS_PRESENTATIONS: Record<RunBoardStatus, StatusPresentation> = {
 	},
 };
 
-/** Renders the four-state run board with localized mock runs. */
+/** Renders the searchable four-state run board with localized mock runs. */
 const RunBoardPage = () => {
 	const { t } = useTranslation();
 	const [layout, setLayout] = useState<RunBoardLayout>("vertical");
+	const [agentQuery, setAgentQuery] = useState("");
+	const agentSearchTerm = agentQuery.trim().toLocaleLowerCase();
 
 	return (
 		<main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
@@ -65,47 +68,56 @@ const RunBoardPage = () => {
 						{t("runBoard.description")}
 					</p>
 				</div>
-				<fieldset
-					aria-label={t("runBoard.layoutSelection")}
-					className="flex shrink-0 items-center gap-xs rounded-lg bg-surface-soft p-xs"
-				>
-					<Tooltip delay={0}>
-						<Button
-							aria-pressed={layout === "vertical"}
-							aria-label={t("runBoard.verticalLayout")}
-							className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
-							onPress={() => setLayout("vertical")}
-							size="sm"
-							variant="ghost"
-						>
-							<LayoutColumns3 aria-hidden="true" className="size-4" />
-						</Button>
-						<Tooltip.Content
-							className="w-max max-w-none whitespace-nowrap break-normal"
-							placement="bottom"
-						>
-							{t("runBoard.verticalLayout")}
-						</Tooltip.Content>
-					</Tooltip>
-					<Tooltip delay={0}>
-						<Button
-							aria-pressed={layout === "horizontal"}
-							aria-label={t("runBoard.horizontalLayout")}
-							className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
-							onPress={() => setLayout("horizontal")}
-							size="sm"
-							variant="ghost"
-						>
-							<LayoutRows3 aria-hidden="true" className="size-4" />
-						</Button>
-						<Tooltip.Content
-							className="w-max max-w-none whitespace-nowrap break-normal"
-							placement="bottom"
-						>
-							{t("runBoard.horizontalLayout")}
-						</Tooltip.Content>
-					</Tooltip>
-				</fieldset>
+				<div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+					<div className="w-full sm:w-72">
+						<SearchBox
+							onValueChange={setAgentQuery}
+							placeholder={t("runBoard.searchPlaceholder")}
+							value={agentQuery}
+						/>
+					</div>
+					<fieldset
+						aria-label={t("runBoard.layoutSelection")}
+						className="flex shrink-0 items-center gap-xs self-start rounded-lg bg-surface-soft p-xs sm:self-auto"
+					>
+						<Tooltip delay={0}>
+							<Button
+								aria-pressed={layout === "vertical"}
+								aria-label={t("runBoard.verticalLayout")}
+								className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
+								onPress={() => setLayout("vertical")}
+								size="sm"
+								variant="ghost"
+							>
+								<LayoutColumns3 aria-hidden="true" className="size-4" />
+							</Button>
+							<Tooltip.Content
+								className="w-max max-w-none whitespace-nowrap break-normal"
+								placement="bottom"
+							>
+								{t("runBoard.verticalLayout")}
+							</Tooltip.Content>
+						</Tooltip>
+						<Tooltip delay={0}>
+							<Button
+								aria-pressed={layout === "horizontal"}
+								aria-label={t("runBoard.horizontalLayout")}
+								className="rounded-md px-2.5 text-caption-sm text-body shadow-none aria-pressed:bg-canvas aria-pressed:text-ink aria-pressed:shadow-sm"
+								onPress={() => setLayout("horizontal")}
+								size="sm"
+								variant="ghost"
+							>
+								<LayoutRows3 aria-hidden="true" className="size-4" />
+							</Button>
+							<Tooltip.Content
+								className="w-max max-w-none whitespace-nowrap break-normal"
+								placement="bottom"
+							>
+								{t("runBoard.horizontalLayout")}
+							</Tooltip.Content>
+						</Tooltip>
+					</fieldset>
+				</div>
 			</header>
 
 			<div
@@ -121,7 +133,11 @@ const RunBoardPage = () => {
 					const presentation = STATUS_PRESENTATIONS[status];
 					const StatusIcon = presentation.icon;
 					const items = RUN_BOARD_ITEMS.filter(
-						(item) => item.status === status,
+						(item) =>
+							item.status === status &&
+							t(`agentNames.${item.agent}`)
+								.toLocaleLowerCase()
+								.includes(agentSearchTerm),
 					);
 
 					return (
@@ -211,7 +227,9 @@ const RunBoardPage = () => {
 									))
 								) : (
 									<p className="px-4 py-10 text-center text-caption-sm text-body">
-										{t("runBoard.empty")}
+										{agentSearchTerm
+											? t("runBoard.noSearchResults")
+											: t("runBoard.empty")}
 									</p>
 								)}
 							</div>

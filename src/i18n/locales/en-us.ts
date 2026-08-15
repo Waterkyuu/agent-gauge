@@ -6,6 +6,10 @@ const enUS = {
 		collapseSidebar: "Collapse sidebar",
 		expandSidebar: "Expand sidebar",
 		loadingPage: "Loading page",
+		common: {
+			search: "Search",
+			clearSearch: "Clear search",
+		},
 		navigation: {
 			compare: "Compare",
 			runs: "Run board",
@@ -76,6 +80,8 @@ const enUS = {
 			title: "Agent run board",
 			description:
 				"Track local agent tasks that are running, awaiting input, completed, or interrupted.",
+			searchPlaceholder: "Search agent products",
+			noSearchResults: "No matching agent tasks.",
 			layoutSelection: "Switch run board layout",
 			verticalLayout: "Vertical panel",
 			horizontalLayout: "Horizontal panel",
