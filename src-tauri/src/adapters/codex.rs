@@ -56,10 +56,25 @@ impl SystemCodexAdapter {
 }
 
 impl CodexAdapter for SystemCodexAdapter {
-    /// Detects a local Codex executable and asks the CLI whether it has active credentials.
+    /// Checks the installed, login, and effective runtime status of the local Codex CLI.
     ///
-    /// A non-zero `codex login status` result means the executable exists but is logged out.
-    /// Missing candidates are skipped so bundled macOS executables can be used as fallbacks.
+    /// The login-status service calls this method through [`CodexAdapter`]; the task execution path
+    /// uses a separate executable check. Each candidate receives `codex login status` in order.
+    /// Successfully starting any candidate proves that Codex is installed. Exit code zero means
+    /// logged in, while a non-zero exit code means installed but logged out.
+    ///
+    /// Missing candidates are skipped so bundled macOS executables remain available as fallbacks.
+    /// If every candidate is missing, this method clears cached runtime settings and returns an
+    /// installed and login status of `false`. Any other process-start failure returns
+    /// [`AppError::CodexProbeFailed`].
+    ///
+    /// For a logged-in installation, the returned [`CodexAuthentication`] also contains the safe
+    /// authentication label plus the effective model and reasoning effort. Logged-out and missing
+    /// installations clear those cached settings so later probes cannot display stale values.
+    ///
+    /// For example, a candidate that starts and exits non-zero returns `installed: true` with
+    /// `logged_in: false`; a machine where every candidate is missing returns both fields as
+    /// `false` without treating absence as a probe error.
     fn check_authentication(&self) -> Result<CodexAuthentication, AppError> {
         for executable in codex_executable_candidates() {
             let output = Command::new(&executable)
