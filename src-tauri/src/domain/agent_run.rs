@@ -2,11 +2,17 @@ use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TokenUsage {
+    /// Total input and output tokens reported by the source Agent.
     pub(crate) total_tokens: u64,
+    /// All tokens included in model input, including cache reads and writes.
     pub(crate) input_tokens: u64,
+    /// Input tokens served from an existing cache entry.
     pub(crate) cached_input_tokens: u64,
+    /// Input tokens written into the source Agent's cache.
     pub(crate) cache_write_input_tokens: u64,
+    /// Tokens generated in the model output.
     pub(crate) output_tokens: u64,
+    /// Output tokens used for reasoning when the source protocol reports them separately.
     pub(crate) reasoning_output_tokens: Option<u64>,
 }
 
@@ -20,8 +26,11 @@ pub(crate) struct ToolCallMetric {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AgentRunMetrics {
+    /// Full wall-clock duration of the Agent task.
     pub(crate) total_duration: Duration,
+    /// Delay before the first non-empty assistant text delta was observed.
     pub(crate) time_to_first_token: Option<Duration>,
+    /// Latest cumulative token snapshot reported by the source Agent.
     pub(crate) token_usage: Option<TokenUsage>,
     /// Sum of explicit reasoning or thinking content-block intervals.
     pub(crate) thinking_duration: Duration,
@@ -31,16 +40,23 @@ pub(crate) struct AgentRunMetrics {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AgentRunOutput {
+    /// Final assistant response assembled from the source event stream.
     pub(crate) response: String,
+    /// Normalized timing, token, and tool-call measurements for the task.
     pub(crate) metrics: AgentRunMetrics,
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct AgentRunMetricsCollector {
+    /// First observed non-empty assistant text offset from task start.
     time_to_first_token: Option<Duration>,
+    /// Latest cumulative token snapshot reported by the Agent.
     token_usage: Option<TokenUsage>,
+    /// Sum of all completed explicit thinking intervals.
     thinking_duration: Duration,
+    /// Thinking block identifiers paired with their task-relative start times.
     active_thinking_intervals: Vec<(String, Duration)>,
+    /// Tool calls retained in source start order while metrics are collected.
     tool_calls: Vec<PendingToolCall>,
 }
 

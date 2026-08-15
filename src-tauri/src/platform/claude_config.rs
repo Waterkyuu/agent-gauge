@@ -11,6 +11,7 @@ pub(crate) enum ClaudeConfigWatchEvent {
 
 /// Owns the native watcher for the user-level Claude settings file.
 pub(crate) struct ClaudeConfigWatcher {
+    /// Live watcher handle retained to keep the operating-system subscription active.
     _watcher: Mutex<RecommendedWatcher>,
 }
 

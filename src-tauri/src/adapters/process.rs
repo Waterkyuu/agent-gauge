@@ -5,8 +5,11 @@ use std::path::Path;
 /// One point-in-time snapshot of whether each supported Agent has a matching local process.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct AgentProcessStates {
+    /// Indicates whether an exact Claude Code executable match was observed.
     pub(crate) claude: bool,
+    /// Indicates whether an exact Codex executable match was observed.
     pub(crate) codex: bool,
+    /// Indicates whether an exact WorkBuddy executable or application match was observed.
     pub(crate) workbuddy: bool,
 }
 

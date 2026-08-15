@@ -7,8 +7,11 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentProcessStatesResponse {
+    /// Indicates whether a Claude Code process is currently running.
     claude: bool,
+    /// Indicates whether a Codex process is currently running.
     codex: bool,
+    /// Indicates whether a WorkBuddy process is currently running.
     workbuddy: bool,
 }
 

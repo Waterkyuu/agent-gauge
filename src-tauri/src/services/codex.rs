@@ -21,6 +21,7 @@ mod tests {
     use crate::error::AppError;
 
     struct FakeCodexAdapter {
+        /// Authentication snapshot returned by this test double.
         authentication: CodexAuthentication,
     }
 
