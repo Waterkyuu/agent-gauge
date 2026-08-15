@@ -24,8 +24,11 @@ const JSON_RPC_METHOD_NOT_FOUND_CODE: i64 = -32601;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkBuddyGlobalSelection {
+    /// Model identifier selected for newly created WorkBuddy tasks.
     id: String,
+    /// Indicates whether thinking is enabled for the selected model.
     is_thinking: bool,
+    /// Explicit thinking effort selected when WorkBuddy supplies one.
     reasoning_effort: Option<String>,
 }
 
@@ -136,10 +139,15 @@ fn read_workbuddy_global_selection() -> Option<WorkBuddyGlobalSelection> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkBuddyAuthentication {
+    /// Indicates whether a usable WorkBuddy application or CLI was found locally.
     pub(crate) installed: bool,
+    /// Indicates whether WorkBuddy accepted an authenticated ACP session.
     pub(crate) logged_in: bool,
+    /// Safe authentication mode derived from the ACP user response.
     pub(crate) authentication_method: Option<String>,
+    /// Effective model selected for newly created WorkBuddy tasks.
     pub(crate) model: Option<String>,
+    /// Effective reasoning effort selected for newly created WorkBuddy tasks.
     pub(crate) reasoning_effort: Option<String>,
 }
 
@@ -183,29 +191,42 @@ impl AgentAdapter for SystemWorkBuddyAdapter {
 
 #[derive(Debug, Deserialize)]
 struct StreamMessage {
+    /// Top-level WorkBuddy stream message discriminator.
     #[serde(rename = "type")]
     message_type: String,
+    /// Optional subtype that refines result and control messages.
     subtype: Option<String>,
+    /// Low-level streaming event carried by this message.
     event: Option<StreamEvent>,
+    /// Final assistant response carried by a result message.
     result: Option<String>,
+    /// Token usage carried by a result message.
     usage: Option<StreamUsage>,
+    /// Indicates whether a result message represents a failed task.
     is_error: Option<bool>,
+    /// Full conversation message carried by an assistant message event.
     message: Option<StreamConversationMessage>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamEvent {
+    /// Low-level event discriminator from the WorkBuddy streaming protocol.
     #[serde(rename = "type")]
     event_type: String,
+    /// Content block announced by a block-start event.
     content_block: Option<StreamContentBlock>,
+    /// Incremental content carried by a block-delta event.
     delta: Option<StreamDelta>,
+    /// Source content-block position associated with the event.
     index: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamContentBlock {
+    /// Content-block discriminator such as thinking or tool_use.
     #[serde(rename = "type")]
     block_type: String,
+    /// Tool name when the block represents a tool invocation.
     name: Option<String>,
 }
 
@@ -231,68 +252,90 @@ struct StreamConversationContent {
 
 #[derive(Debug, Deserialize)]
 struct StreamDelta {
+    /// Delta discriminator that identifies the incremental content kind.
     #[serde(rename = "type")]
     delta_type: Option<String>,
+    /// Incremental assistant text when supplied by the delta.
     text: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamUsage {
+    /// Non-cache input tokens reported for the task.
     input_tokens: u64,
+    /// Tokens generated in the model output.
     output_tokens: u64,
+    /// Input tokens written into WorkBuddy's prompt cache.
     #[serde(default)]
     cache_creation_input_tokens: u64,
+    /// Input tokens served from WorkBuddy's prompt cache.
     #[serde(default)]
     cache_read_input_tokens: u64,
 }
 
 #[derive(Debug, Deserialize)]
 struct AcpMessage {
+    /// JSON-RPC response identifier.
     id: Option<u64>,
+    /// Successful ACP response payload.
     result: Option<AcpResult>,
+    /// Structured ACP failure payload.
     error: Option<AcpError>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpResult {
+    /// Session identifier returned after successful ACP initialization.
     session_id: Option<String>,
+    /// Available and currently selected ACP models.
     models: Option<AcpModels>,
+    /// Runtime configuration choices exposed by WorkBuddy.
     config_options: Option<Vec<AcpConfigOption>>,
+    /// Authenticated user information returned by ACP.
     user_info: Option<AcpUserInfo>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpUserInfo {
+    /// Stable user identifier proving that ACP returned an authenticated account.
     user_id: String,
+    /// Authentication type reported for the current account.
     auth_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpModels {
+    /// Models that the current ACP session can select.
     #[serde(default)]
     available_models: Vec<AcpModel>,
+    /// Identifier of the model selected for the current ACP session.
     current_model_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpModel {
+    /// Stable identifier used to select the model through ACP.
     model_id: String,
+    /// User-visible model label reported by WorkBuddy.
     name: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpConfigOption {
+    /// Stable identifier of the configurable runtime option.
     id: String,
+    /// Value selected for this runtime option.
     current_value: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct AcpError {
+    /// JSON-RPC error code returned by WorkBuddy ACP.
     code: i64,
 }
 

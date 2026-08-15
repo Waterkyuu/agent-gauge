@@ -25,10 +25,15 @@ const MAX_RUNTIME_DEFAULT_RESOLUTION_ATTEMPTS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexAuthentication {
+    /// Indicates whether a usable Codex executable was found locally.
     pub(crate) installed: bool,
+    /// Indicates whether the Codex CLI reports active credentials.
     pub(crate) logged_in: bool,
+    /// Safe authentication mode parsed from the Codex CLI status output.
     pub(crate) authentication_method: Option<String>,
+    /// Effective model selected for newly created Codex threads.
     pub(crate) model: Option<String>,
+    /// Effective reasoning effort selected for newly created Codex threads.
     pub(crate) reasoning_effort: Option<String>,
 }
 
@@ -38,6 +43,7 @@ pub(crate) trait CodexAdapter {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SystemCodexAdapter {
+    /// Shared cache of effective runtime defaults used by authentication probes.
     runtime_defaults_cache: CodexRuntimeDefaultsCache,
 }
 
@@ -129,18 +135,26 @@ impl AgentAdapter for SystemCodexAdapter {
 
 #[derive(Debug, Deserialize)]
 struct AppServerMessage {
+    /// JSON-RPC request identifier when the message is a response.
     id: Option<u64>,
+    /// App Server notification method when the message is an event.
     method: Option<String>,
+    /// Event payload supplied by an App Server notification.
     params: Option<AppServerParams>,
+    /// Successful JSON-RPC response payload.
     result: Option<AppServerResult>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppServerParams {
+    /// Incremental assistant text emitted by a streaming notification.
     delta: Option<String>,
+    /// Latest cumulative token usage for the active thread.
     token_usage: Option<ThreadTokenUsage>,
+    /// Turn state emitted by a turn lifecycle notification.
     turn: Option<AppServerTurn>,
+    /// Item state emitted by an item lifecycle notification.
     item: Option<AppServerThreadItem>,
 }
 
@@ -190,45 +204,61 @@ impl AppServerThreadItem {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppServerResult {
+    /// Thread created by a successful thread/start response.
     thread: Option<AppServerThread>,
+    /// Model resolved by a successful account or thread response.
     model: Option<String>,
+    /// Reasoning effort resolved by a successful account or thread response.
     reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct AppServerThread {
+    /// Stable thread identifier assigned by Codex App Server.
     id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CodexRuntimeDefaults {
+    /// Temporary thread identifier used while resolving runtime defaults.
     thread_id: String,
+    /// Model selected by App Server for the temporary thread.
     model: String,
+    /// Reasoning effort selected by App Server for the temporary thread.
     reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CodexRuntimeSettings {
+    /// Effective model after merging explicit configuration and App Server defaults.
     model: String,
+    /// Effective reasoning effort after merging configuration layers.
     reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct CodexConfigLayer {
+    /// Model explicitly configured in this TOML layer.
     model: Option<String>,
+    /// Reasoning effort explicitly configured in this TOML layer.
     model_reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 struct CachedCodexRuntimeDefaults {
+    /// Cache revision at which the runtime settings were resolved.
     revision: u64,
+    /// Effective runtime settings retained for the matching revision.
     value: CodexRuntimeSettings,
 }
 
 #[derive(Debug, Default)]
 struct CodexRuntimeDefaultsCacheState {
+    /// Indicates whether native file watching makes cached values safe to serve.
     enabled: AtomicBool,
+    /// Generation incremented whenever watched configuration may have changed.
     revision: AtomicU64,
+    /// Cached runtime settings paired with the generation that produced them.
     value: Mutex<Option<CachedCodexRuntimeDefaults>>,
 }
 
@@ -238,6 +268,7 @@ struct CodexRuntimeDefaultsCacheState {
 /// watching is unavailable, every probe resolves fresh defaults so the UI cannot become stale.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CodexRuntimeDefaultsCache {
+    /// Thread-safe state shared by every clone of the cache handle.
     state: Arc<CodexRuntimeDefaultsCacheState>,
 }
 
@@ -300,22 +331,30 @@ impl CodexRuntimeDefaultsCache {
 
 #[derive(Debug, Deserialize)]
 struct AppServerTurn {
+    /// Current turn lifecycle status reported by App Server.
     status: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct ThreadTokenUsage {
+    /// Most recent cumulative usage snapshot for the active turn.
     last: TokenUsageBreakdown,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TokenUsageBreakdown {
+    /// Total input and output tokens reported by Codex.
     total_tokens: u64,
+    /// All tokens included in model input.
     input_tokens: u64,
+    /// Input tokens served from an existing cache entry.
     cached_input_tokens: u64,
+    /// Input tokens written into the prompt cache.
     cache_write_input_tokens: u64,
+    /// Tokens generated in the model output.
     output_tokens: u64,
+    /// Output tokens consumed by model reasoning.
     reasoning_output_tokens: u64,
 }
 

@@ -24,10 +24,15 @@ const MAX_RUNTIME_SETTINGS_RESOLUTION_ATTEMPTS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ClaudeAuthentication {
+    /// Indicates whether a usable Claude Code executable was found locally.
     pub(crate) installed: bool,
+    /// Indicates whether Claude Code reports active credentials.
     pub(crate) logged_in: bool,
+    /// Safe authentication mode parsed from Claude Code's status response.
     pub(crate) authentication_method: Option<String>,
+    /// Effective model read from the local Claude settings.
     pub(crate) model: Option<String>,
+    /// Effective reasoning effort read from the local Claude settings.
     pub(crate) reasoning_effort: Option<String>,
 }
 
@@ -37,6 +42,7 @@ pub(crate) trait ClaudeAdapter {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SystemClaudeAdapter {
+    /// Shared cache of effective runtime settings used by authentication probes.
     runtime_settings_cache: ClaudeRuntimeSettingsCache,
 }
 
@@ -101,39 +107,51 @@ impl AgentAdapter for SystemClaudeAdapter {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AuthStatus {
+    /// Login state reported by `claude auth status`.
     logged_in: bool,
+    /// Authentication method reported by `claude auth status`.
     auth_method: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeSettings {
+    /// Model explicitly selected in the user-level Claude settings.
     model: Option<String>,
+    /// Thinking effort explicitly selected in the user-level Claude settings.
     effort_level: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ClaudeRuntimeSettings {
+    /// Effective model parsed from the local settings file.
     model: Option<String>,
+    /// Effective reasoning effort parsed from the local settings file.
     reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 struct CachedClaudeRuntimeSettings {
+    /// Cache revision at which the runtime settings were resolved.
     revision: u64,
+    /// Runtime settings retained for the matching revision.
     value: ClaudeRuntimeSettings,
 }
 
 #[derive(Debug, Default)]
 struct ClaudeRuntimeSettingsCacheState {
+    /// Indicates whether native file watching makes cached values safe to serve.
     enabled: AtomicBool,
+    /// Generation incremented whenever the watched settings may have changed.
     revision: AtomicU64,
+    /// Cached settings paired with the generation that produced them.
     value: Mutex<Option<CachedClaudeRuntimeSettings>>,
 }
 
 /// Shares parsed Claude model and effort settings across authentication probes.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ClaudeRuntimeSettingsCache {
+    /// Thread-safe state shared by every clone of the cache handle.
     state: Arc<ClaudeRuntimeSettingsCacheState>,
 }
 
@@ -194,29 +212,42 @@ impl ClaudeRuntimeSettingsCache {
 
 #[derive(Debug, Deserialize)]
 struct StreamMessage {
+    /// Top-level Claude stream message discriminator.
     #[serde(rename = "type")]
     message_type: String,
+    /// Optional subtype that refines result and control messages.
     subtype: Option<String>,
+    /// Low-level streaming event carried by this message.
     event: Option<StreamEvent>,
+    /// Final assistant response carried by a result message.
     result: Option<String>,
+    /// Token usage carried by a result message.
     usage: Option<StreamUsage>,
+    /// Indicates whether a result message represents a failed task.
     is_error: Option<bool>,
+    /// Full conversation message carried by an assistant message event.
     message: Option<StreamConversationMessage>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamEvent {
+    /// Low-level event discriminator from the Claude streaming protocol.
     #[serde(rename = "type")]
     event_type: String,
+    /// Content block announced by a block-start event.
     content_block: Option<StreamContentBlock>,
+    /// Incremental content carried by a block-delta event.
     delta: Option<StreamDelta>,
+    /// Source content-block position associated with the event.
     index: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamContentBlock {
+    /// Content-block discriminator such as thinking or tool_use.
     #[serde(rename = "type")]
     block_type: String,
+    /// Tool name when the block represents a tool invocation.
     name: Option<String>,
 }
 
@@ -242,17 +273,23 @@ struct StreamConversationContent {
 
 #[derive(Debug, Deserialize)]
 struct StreamDelta {
+    /// Delta discriminator that identifies the incremental content kind.
     #[serde(rename = "type")]
     delta_type: Option<String>,
+    /// Incremental assistant text when supplied by the delta.
     text: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamUsage {
+    /// Non-cache input tokens reported for the task.
     input_tokens: u64,
+    /// Tokens generated in the model output.
     output_tokens: u64,
+    /// Input tokens written into Claude's prompt cache.
     #[serde(default)]
     cache_creation_input_tokens: u64,
+    /// Input tokens served from Claude's prompt cache.
     #[serde(default)]
     cache_read_input_tokens: u64,
 }
