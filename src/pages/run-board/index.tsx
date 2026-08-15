@@ -9,11 +9,12 @@ import {
 } from "@gravity-ui/icons";
 import { Button, Card, Tooltip } from "@heroui/react";
 import { cn } from "cnfast";
-import { type ComponentType, type SVGProps, useState } from "react";
+import { type ComponentType, type SVGProps, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentLogo } from "@/components/agent-logo";
 import { SearchBox } from "@/components/ui/search-box";
 import { RUN_BOARD_ITEMS, type RunBoardStatus } from "@/constants/run-board";
+import { debounce } from "@/utils/common";
 
 type RunBoardLayout = "vertical" | "horizontal";
 
@@ -54,8 +55,18 @@ const STATUS_PRESENTATIONS: Record<RunBoardStatus, StatusPresentation> = {
 const RunBoardPage = () => {
 	const { t } = useTranslation();
 	const [layout, setLayout] = useState<RunBoardLayout>("vertical");
+	const [agentInput, setAgentInput] = useState("");
 	const [agentQuery, setAgentQuery] = useState("");
 	const agentSearchTerm = agentQuery.trim().toLocaleLowerCase();
+
+	// Applies only the latest agent input after the user pauses typing.
+	useEffect(() => {
+		const updateAgentQuery = debounce(setAgentQuery);
+
+		updateAgentQuery(agentInput);
+
+		return updateAgentQuery.cancel;
+	}, [agentInput]);
 
 	return (
 		<main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
@@ -71,9 +82,9 @@ const RunBoardPage = () => {
 				<div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
 					<div className="w-full sm:w-72">
 						<SearchBox
-							onValueChange={setAgentQuery}
+							onValueChange={setAgentInput}
 							placeholder={t("runBoard.searchPlaceholder")}
-							value={agentQuery}
+							value={agentInput}
 						/>
 					</div>
 					<fieldset
