@@ -116,6 +116,8 @@ application runtime.
 - Use early returns to keep the main execution path readable.
 - Avoid boolean parameters when an enum communicates intent more clearly.
 - Comments explain why a decision or invariant exists, not what the syntax does.
+- Every field in a `struct` must have a field-level `///` documentation comment, including named
+  and tuple fields in private, protocol, DTO, and test-only structs.
 - Add rustdoc to public domain types, public traits, reusable APIs, and non-obvious command contracts.
   Include examples when they clarify intended usage.
 
