@@ -33,6 +33,9 @@ mod services {
     pub(crate) mod process;
     pub(crate) mod workbuddy;
 }
+mod utils {
+    pub(crate) mod debounce;
+}
 
 use crate::adapters::claude::ClaudeRuntimeSettingsCache;
 use crate::adapters::codex::CodexRuntimeDefaultsCache;
