@@ -28,11 +28,9 @@ Before creating a Git commit, you must run all of the following commands in orde
 ```
 src/
   api/                          # API request layer: request modules organized by business domain; client contains the request instance, authentication, and interceptors
-  stores/                       # Global Jotai atom state
+  stores/                       # Global Zustand state
   components/                  # General-purpose or shared business components reused across screens and features
-    icons/                      # Icon components
-    share/                      # Shared composite business components
-    ui/                         # Base UI wrappers and design-system adaptation layer, such as Gluestack UI
+    ui/                         # Base UI wrappers and design-system adaptation layer, such HeroUIs UI
   config.ts                     # Runtime configuration, such as API, WebSocket, and baggage settings
   hooks/                        # Reusable hooks
   i18n/                         # Internationalization setup, language switching, and remote translation loading
