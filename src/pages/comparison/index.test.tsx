@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { AgentProcessStates, AgentRuntimeConfig } from "@/types/agent";
@@ -17,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
 	runClaudeTask: vi.fn(),
 	runCodexTask: vi.fn(),
 	runWorkBuddyTask: vi.fn(),
+	saveComparisonHistory: vi.fn(),
 }));
 
 vi.mock("@/api/agent", () => ({
@@ -41,6 +42,10 @@ vi.mock("@/api/workbuddy", () => ({
 	checkWorkBuddyLogin: apiMocks.checkWorkBuddyLogin,
 	onWorkBuddyConfigChanged: apiMocks.onWorkBuddyConfigChanged,
 	runWorkBuddyTask: apiMocks.runWorkBuddyTask,
+}));
+
+vi.mock("@/api/comparison", () => ({
+	saveComparisonHistory: apiMocks.saveComparisonHistory,
 }));
 
 import ComparisonPage from ".";
@@ -88,6 +93,7 @@ describe("ComparisonPage native status updates", () => {
 			processStateListener = listener;
 			return Promise.resolve(stopProcessStateListener);
 		});
+		apiMocks.saveComparisonHistory.mockResolvedValue({ id: 1 });
 	});
 
 	afterEach(() => {
@@ -215,5 +221,49 @@ describe("ComparisonPage native status updates", () => {
 			workBuddyCard.getByText("event-workbuddy-model"),
 		).toBeInTheDocument();
 		expect(workBuddyCard.getByText("高 (high)")).toBeInTheDocument();
+	});
+
+	it("persists one history record after every selected Agent settles", async () => {
+		const runResult = {
+			response: "done",
+			totalDurationMs: 1000,
+			timeToFirstTokenMs: 100,
+			tokenUsage: null,
+			thinkingDurationMs: 200,
+			toolCallCount: 0,
+			toolCalls: [],
+		};
+		apiMocks.runClaudeTask.mockResolvedValue(runResult);
+		apiMocks.runCodexTask.mockResolvedValue(runResult);
+		apiMocks.runWorkBuddyTask.mockResolvedValue(runResult);
+		render(<ComparisonPage />);
+
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		fireEvent.change(screen.getByLabelText("任务内容"), {
+			target: { value: "检查性能" },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "运行 3 个 Agent 对比" }),
+		);
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		expect(apiMocks.saveComparisonHistory).toHaveBeenCalledTimes(1);
+		expect(apiMocks.saveComparisonHistory).toHaveBeenCalledWith(
+			expect.objectContaining({
+				query: "检查性能",
+				results: expect.arrayContaining([
+					expect.objectContaining({ agent: "codex", status: "succeeded" }),
+					expect.objectContaining({ agent: "claude", status: "succeeded" }),
+					expect.objectContaining({ agent: "workbuddy", status: "succeeded" }),
+				]),
+			}),
+		);
 	});
 });

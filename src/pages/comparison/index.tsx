@@ -14,6 +14,7 @@ import {
 	onCodexConfigChanged,
 	runCodexTask,
 } from "@/api/codex";
+import { saveComparisonHistory } from "@/api/comparison";
 import {
 	checkWorkBuddyConfig,
 	checkWorkBuddyLogin,
@@ -27,6 +28,7 @@ import type {
 	AgentRuntimeConfig,
 	AgentRuntimeStatus,
 } from "@/types/agent";
+import type { ComparisonResultInput } from "@/types/comparison";
 import { getErrorMessage } from "@/utils/error";
 import { AgentComparisonCard } from "./components/agent-comparison-card";
 import { AgentSelectionCard } from "./components/agent-selection-card";
@@ -473,8 +475,15 @@ const ComparisonPage = () => {
 				: { status: "idle" },
 		});
 
-		await Promise.all(
+		const historyResults = await Promise.all(
 			activeAgents.map(async (agent) => {
+				const loginState = loginStates[agent];
+				const loginStatus =
+					loginState.status === "resolved" ? loginState.value : null;
+				const runtimeStatus =
+					agent === "workbuddy" && loginStatus?.loggedIn
+						? { ...loginStatus, ...workBuddyConfig }
+						: loginStatus;
 				try {
 					const result = await AGENT_TASK_RUNNERS[agent](normalizedQuery);
 					setRunStates((current) => ({
@@ -488,12 +497,20 @@ const ComparisonPage = () => {
 						}),
 						{ description: t("viewResult") },
 					);
+					return {
+						agent,
+						model: runtimeStatus?.model ?? null,
+						reasoningEffort: runtimeStatus?.reasoningEffort ?? null,
+						status: "succeeded",
+						result,
+					} satisfies ComparisonResultInput;
 				} catch (error) {
+					const errorMessage = getErrorMessage(error, t("requestFailed"));
 					setRunStates((current) => ({
 						...current,
 						[agent]: {
 							status: "failed",
-							errorMessage: getErrorMessage(error, t("requestFailed")),
+							errorMessage,
 						},
 					}));
 					Toast.toast.danger(
@@ -503,9 +520,24 @@ const ComparisonPage = () => {
 						}),
 						{ description: t("viewResult") },
 					);
+					return {
+						agent,
+						model: runtimeStatus?.model ?? null,
+						reasoningEffort: runtimeStatus?.reasoningEffort ?? null,
+						status: "failed",
+						errorMessage,
+					} satisfies ComparisonResultInput;
 				}
 			}),
 		);
+		try {
+			await saveComparisonHistory({
+				query: normalizedQuery,
+				results: historyResults,
+			});
+		} catch {
+			Toast.toast.danger(t("comparisonHistory.saveFailed"));
+		}
 	};
 
 	return (
