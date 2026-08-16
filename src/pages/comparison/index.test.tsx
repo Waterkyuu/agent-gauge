@@ -169,6 +169,31 @@ describe("ComparisonPage native status updates", () => {
 		expect(apiMocks.checkWorkBuddyLogin).toHaveBeenCalledTimes(2);
 	});
 
+	it("starts WorkBuddy config monitoring after a later login", async () => {
+		apiMocks.checkWorkBuddyLogin
+			.mockResolvedValueOnce({
+				installed: false,
+				loggedIn: false,
+				authenticationMethod: null,
+				model: null,
+				reasoningEffort: null,
+			})
+			.mockResolvedValue(RUNTIME_STATUS);
+		render(<ComparisonPage />);
+
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		expect(apiMocks.checkWorkBuddyConfig).not.toHaveBeenCalled();
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5_100);
+		});
+
+		expect(apiMocks.checkWorkBuddyConfig).toHaveBeenCalledTimes(1);
+	});
+
 	it("applies native WorkBuddy model changes to its card", async () => {
 		render(<ComparisonPage />);
 

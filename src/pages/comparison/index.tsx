@@ -204,6 +204,9 @@ const ComparisonPage = () => {
 	const isRunning = Object.values(runStates).some(
 		(state) => state.status === "running",
 	);
+	const isWorkBuddyLoggedIn =
+		loginStates.workbuddy.status === "resolved" &&
+		loginStates.workbuddy.value.loggedIn;
 
 	useEffect(() => {
 		if (isRunning) {
@@ -299,7 +302,6 @@ const ComparisonPage = () => {
 
 	useEffect(() => {
 		let isActive = true;
-		let receivedNativeChange = false;
 
 		/**
 		 * Applies a WorkBuddy configuration snapshot received after the listener is active.
@@ -311,21 +313,10 @@ const ComparisonPage = () => {
 			if (!isActive) {
 				return;
 			}
-			receivedNativeChange = true;
 			setWorkBuddyConfig(config);
 		};
 
 		const stopListening = onWorkBuddyConfigChanged(applyWorkBuddyConfig);
-		stopListening
-			.then(() => checkWorkBuddyConfig())
-			.then((config) => {
-				if (isActive && !receivedNativeChange) {
-					setWorkBuddyConfig(config);
-				}
-			})
-			.catch(() => {
-				// Keep the last valid configuration when the initial LevelDB read fails.
-			});
 
 		return () => {
 			isActive = false;
@@ -335,6 +326,27 @@ const ComparisonPage = () => {
 			);
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!isWorkBuddyLoggedIn) {
+			return;
+		}
+
+		let isActive = true;
+		checkWorkBuddyConfig()
+			.then((config) => {
+				if (isActive) {
+					setWorkBuddyConfig(config);
+				}
+			})
+			.catch(() => {
+				// Keep the last valid configuration when the LevelDB read fails.
+			});
+
+		return () => {
+			isActive = false;
+		};
+	}, [isWorkBuddyLoggedIn]);
 
 	useEffect(() => {
 		let isActive = true;

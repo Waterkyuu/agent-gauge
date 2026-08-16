@@ -20,6 +20,33 @@ pub(crate) struct WorkBuddyConfigWatcher {
     _debouncer: EventDebouncer,
 }
 
+/// Stores the optional watcher so configuration monitoring can start after a later installation.
+#[derive(Default)]
+pub(crate) struct WorkBuddyConfigWatcherState {
+    /// Active watcher created by the first configuration read whose LevelDB directory exists.
+    watcher: Mutex<Option<WorkBuddyConfigWatcher>>,
+}
+
+impl WorkBuddyConfigWatcherState {
+    /// Starts monitoring when the directory exists and keeps an existing watcher unchanged.
+    pub(crate) fn start_if_available(
+        &self,
+        local_storage_path: PathBuf,
+        on_event: impl Fn(WorkBuddyConfigWatchEvent) + Send + Sync + 'static,
+    ) -> notify::Result<()> {
+        let mut watcher = self
+            .watcher
+            .lock()
+            .map_err(|_| notify::Error::generic("WorkBuddy watcher state is unavailable"))?;
+        if watcher.is_some() {
+            return Ok(());
+        }
+
+        *watcher = WorkBuddyConfigWatcher::start(local_storage_path, on_event)?;
+        Ok(())
+    }
+}
+
 impl WorkBuddyConfigWatcher {
     /// Watches one existing WorkBuddy LevelDB directory for data-file mutations.
     pub(crate) fn start(
