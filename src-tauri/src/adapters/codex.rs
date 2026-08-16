@@ -509,6 +509,9 @@ fn with_app_server<T>(
     let (event_sender, event_receiver) = mpsc::sync_channel(EVENT_QUEUE_CAPACITY);
     let reader_handle = thread::spawn(move || read_app_server_events(stdout, event_sender));
     let operation_result = operation(&mut stdin, &event_receiver);
+    // npm-installed Codex uses a launcher process. Closing its inherited input also lets the
+    // native App Server exit, so the stdout reader cannot outlive the launcher indefinitely.
+    drop(stdin);
     let termination_result = terminate_child(&mut child);
     let reader_result = reader_handle
         .join()
@@ -755,11 +758,57 @@ fn codex_executable_candidates() -> Vec<OsString> {
 mod tests {
     use super::{
         codex_executable_candidates, collect_run_events, runtime_settings_from_config_layers,
-        CodexRuntimeDefaultsCache, CodexRuntimeSettings,
+        with_app_server, CodexRuntimeDefaultsCache, CodexRuntimeSettings,
     };
     use crate::error::AppError;
     use std::sync::mpsc;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
+
+    #[cfg(unix)]
+    #[test]
+    fn closes_app_server_stdin_before_waiting_for_the_stdout_reader() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let script_path = std::env::temp_dir().join(format!(
+            "agent-gauge-codex-wrapper-test-{}",
+            std::process::id()
+        ));
+        std::fs::write(
+            &script_path,
+            r#"#!/bin/sh
+cat <&0 &
+reader_pid=$!
+(
+  sleep 2
+  kill "$reader_pid" 2>/dev/null
+) </dev/null >/dev/null 2>&1 &
+echo READY
+wait "$reader_pid"
+"#,
+        )
+        .expect("wrapper fixture should be written");
+        let mut permissions = std::fs::metadata(&script_path)
+            .expect("wrapper fixture metadata should be readable")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&script_path, permissions)
+            .expect("wrapper fixture should be executable");
+
+        let started_at = Instant::now();
+        let result = with_app_server(script_path.as_os_str(), |_stdin, receiver| {
+            let ready = super::receive_line(receiver, Duration::from_secs(1))?;
+            assert_eq!(ready.trim(), "READY");
+            Ok(())
+        });
+        let elapsed = started_at.elapsed();
+        std::fs::remove_file(script_path).expect("wrapper fixture should be removable");
+
+        assert_eq!(result, Ok(()));
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "cleanup waited for the detached server process: {elapsed:?}"
+        );
+    }
 
     #[cfg(target_os = "macos")]
     #[test]
