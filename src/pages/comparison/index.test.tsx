@@ -2,15 +2,17 @@ import "@testing-library/jest-dom/vitest";
 import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
-import type { AgentProcessStates } from "@/types/agent";
+import type { AgentProcessStates, AgentRuntimeConfig } from "@/types/agent";
 
 const apiMocks = vi.hoisted(() => ({
 	checkAgentProcesses: vi.fn(),
 	checkClaudeLogin: vi.fn(),
 	checkCodexLogin: vi.fn(),
+	checkWorkBuddyConfig: vi.fn(),
 	checkWorkBuddyLogin: vi.fn(),
 	onClaudeConfigChanged: vi.fn(),
 	onCodexConfigChanged: vi.fn(),
+	onWorkBuddyConfigChanged: vi.fn(),
 	onAgentProcessStatesChanged: vi.fn(),
 	runClaudeTask: vi.fn(),
 	runCodexTask: vi.fn(),
@@ -35,7 +37,9 @@ vi.mock("@/api/codex", () => ({
 }));
 
 vi.mock("@/api/workbuddy", () => ({
+	checkWorkBuddyConfig: apiMocks.checkWorkBuddyConfig,
 	checkWorkBuddyLogin: apiMocks.checkWorkBuddyLogin,
+	onWorkBuddyConfigChanged: apiMocks.onWorkBuddyConfigChanged,
 	runWorkBuddyTask: apiMocks.runWorkBuddyTask,
 }));
 
@@ -50,14 +54,18 @@ const RUNTIME_STATUS = {
 };
 
 let processStateListener: ((states: AgentProcessStates) => void) | null = null;
+let workBuddyConfigListener: ((config: AgentRuntimeConfig) => void) | null =
+	null;
 const stopProcessStateListener = vi.fn();
+const stopWorkBuddyConfigListener = vi.fn();
 
-// Covers process checks owned by the comparison page lifecycle.
-describe("ComparisonPage process checks", () => {
+// Covers native status subscriptions owned by the comparison page lifecycle.
+describe("ComparisonPage native status updates", () => {
 	beforeEach(async () => {
 		vi.useFakeTimers();
 		await i18n.changeLanguage("zh-CN");
 		stopProcessStateListener.mockClear();
+		stopWorkBuddyConfigListener.mockClear();
 		apiMocks.checkAgentProcesses.mockResolvedValue({
 			claude: false,
 			codex: false,
@@ -65,9 +73,17 @@ describe("ComparisonPage process checks", () => {
 		});
 		apiMocks.checkClaudeLogin.mockResolvedValue(RUNTIME_STATUS);
 		apiMocks.checkCodexLogin.mockResolvedValue(RUNTIME_STATUS);
+		apiMocks.checkWorkBuddyConfig.mockResolvedValue({
+			model: "initial-workbuddy-model",
+			reasoningEffort: "medium",
+		});
 		apiMocks.checkWorkBuddyLogin.mockResolvedValue(RUNTIME_STATUS);
 		apiMocks.onClaudeConfigChanged.mockResolvedValue(vi.fn());
 		apiMocks.onCodexConfigChanged.mockResolvedValue(vi.fn());
+		apiMocks.onWorkBuddyConfigChanged.mockImplementation((listener) => {
+			workBuddyConfigListener = listener;
+			return Promise.resolve(stopWorkBuddyConfigListener);
+		});
 		apiMocks.onAgentProcessStatesChanged.mockImplementation((listener) => {
 			processStateListener = listener;
 			return Promise.resolve(stopProcessStateListener);
@@ -76,6 +92,7 @@ describe("ComparisonPage process checks", () => {
 
 	afterEach(() => {
 		processStateListener = null;
+		workBuddyConfigListener = null;
 		vi.useRealTimers();
 		vi.clearAllMocks();
 	});
@@ -132,5 +149,46 @@ describe("ComparisonPage process checks", () => {
 		});
 
 		expect(stopProcessStateListener).toHaveBeenCalledTimes(1);
+	});
+
+	it("reads WorkBuddy config once while login checks continue every five seconds", async () => {
+		render(<ComparisonPage />);
+
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		expect(apiMocks.checkWorkBuddyConfig).toHaveBeenCalledTimes(1);
+		expect(apiMocks.checkWorkBuddyLogin).toHaveBeenCalledTimes(1);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(5_100);
+		});
+
+		expect(apiMocks.checkWorkBuddyConfig).toHaveBeenCalledTimes(1);
+		expect(apiMocks.checkWorkBuddyLogin).toHaveBeenCalledTimes(2);
+	});
+
+	it("applies native WorkBuddy model changes to its card", async () => {
+		render(<ComparisonPage />);
+
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		act(() => {
+			workBuddyConfigListener?.({
+				model: "event-workbuddy-model",
+				reasoningEffort: "high",
+			});
+		});
+
+		const workBuddyCard = within(
+			screen.getByRole("button", { name: "WorkBuddy" }),
+		);
+		expect(
+			workBuddyCard.getByText("event-workbuddy-model"),
+		).toBeInTheDocument();
+		expect(workBuddyCard.getByText("高 (high)")).toBeInTheDocument();
 	});
 });

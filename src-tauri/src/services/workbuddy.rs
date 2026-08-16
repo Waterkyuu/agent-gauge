@@ -12,8 +12,8 @@ pub(crate) fn check_workbuddy_login(
         installed: authentication.installed,
         logged_in: authentication.logged_in,
         authentication_method: authentication.authentication_method,
-        model: authentication.model,
-        reasoning_effort: authentication.reasoning_effort,
+        model: None,
+        reasoning_effort: None,
     })
 }
 
@@ -31,20 +31,18 @@ mod tests {
                 installed: true,
                 logged_in: true,
                 authentication_method: Some("WorkBuddy account".to_string()),
-                model: Some("fast-model".to_string()),
-                reasoning_effort: Some("enabled".to_string()),
             })
         }
     }
 
     #[test]
-    fn reports_the_local_workbuddy_authentication_state() {
+    fn reports_authentication_without_polling_runtime_config() {
         let status =
             check_workbuddy_login(&FakeWorkBuddyAdapter).expect("authentication probe should pass");
 
         assert!(status.installed);
         assert!(status.logged_in);
-        assert_eq!(status.model.as_deref(), Some("fast-model"));
-        assert_eq!(status.reasoning_effort.as_deref(), Some("enabled"));
+        assert_eq!(status.model, None);
+        assert_eq!(status.reasoning_effort, None);
     }
 }

@@ -14,11 +14,17 @@ import {
 	onCodexConfigChanged,
 	runCodexTask,
 } from "@/api/codex";
-import { checkWorkBuddyLogin, runWorkBuddyTask } from "@/api/workbuddy";
+import {
+	checkWorkBuddyConfig,
+	checkWorkBuddyLogin,
+	onWorkBuddyConfigChanged,
+	runWorkBuddyTask,
+} from "@/api/workbuddy";
 import type {
 	AgentKind,
 	AgentProcessStates,
 	AgentRunResult,
+	AgentRuntimeConfig,
 	AgentRuntimeStatus,
 } from "@/types/agent";
 import { getErrorMessage } from "@/utils/error";
@@ -185,6 +191,10 @@ const ComparisonPage = () => {
 	const [processState, setProcessState] = useState<ProcessState>({
 		status: "checking",
 	});
+	const [workBuddyConfig, setWorkBuddyConfig] = useState<AgentRuntimeConfig>({
+		model: null,
+		reasoningEffort: null,
+	});
 	const [runStates, setRunStates] = useState<Record<AgentKind, AgentRunState>>({
 		claude: { status: "idle" },
 		codex: { status: "idle" },
@@ -286,6 +296,45 @@ const ComparisonPage = () => {
 			});
 		};
 	}, [isRunning]);
+
+	useEffect(() => {
+		let isActive = true;
+		let receivedNativeChange = false;
+
+		/**
+		 * Applies a WorkBuddy configuration snapshot received after the listener is active.
+		 *
+		 * @example
+		 * applyWorkBuddyConfig({ model: "kimi-k3", reasoningEffort: "high" });
+		 */
+		const applyWorkBuddyConfig = (config: AgentRuntimeConfig) => {
+			if (!isActive) {
+				return;
+			}
+			receivedNativeChange = true;
+			setWorkBuddyConfig(config);
+		};
+
+		const stopListening = onWorkBuddyConfigChanged(applyWorkBuddyConfig);
+		stopListening
+			.then(() => checkWorkBuddyConfig())
+			.then((config) => {
+				if (isActive && !receivedNativeChange) {
+					setWorkBuddyConfig(config);
+				}
+			})
+			.catch(() => {
+				// Keep the last valid configuration when the initial LevelDB read fails.
+			});
+
+		return () => {
+			isActive = false;
+			stopListening.then(
+				(stop) => stop(),
+				() => {},
+			);
+		};
+	}, []);
 
 	useEffect(() => {
 		let isActive = true;
@@ -474,8 +523,12 @@ const ComparisonPage = () => {
 					<fieldset aria-label={t("agentSelection")}>
 						{AGENT_KINDS.map((agent) => {
 							const loginState = loginStates[agent];
-							const runtimeStatus =
+							const loginStatus =
 								loginState.status === "resolved" ? loginState.value : null;
+							const runtimeStatus =
+								agent === "workbuddy" && loginStatus?.loggedIn
+									? { ...loginStatus, ...workBuddyConfig }
+									: loginStatus;
 							const isSelected =
 								selectedAgents.includes(agent) && agentDisplays[agent].isReady;
 
