@@ -1,4 +1,5 @@
 mod adapters {
+    pub(crate) mod activity;
     pub(crate) mod agent;
     pub(crate) mod claude;
     pub(crate) mod codex;
@@ -6,6 +7,7 @@ mod adapters {
     pub(crate) mod workbuddy;
 }
 mod commands {
+    pub(crate) mod activity;
     pub(crate) mod agent;
     pub(crate) mod claude;
     pub(crate) mod codex;
@@ -24,6 +26,7 @@ mod dto {
     pub(crate) mod workbuddy;
 }
 mod domain {
+    pub(crate) mod agent_activity;
     pub(crate) mod agent_run;
     pub(crate) mod comparison;
 }
@@ -41,6 +44,7 @@ mod repositories {
     pub(crate) mod comparison;
 }
 mod services {
+    pub(crate) mod activity;
     pub(crate) mod agent;
     pub(crate) mod claude;
     pub(crate) mod codex;
@@ -52,9 +56,11 @@ mod utils {
     pub(crate) mod debounce;
 }
 
+use crate::adapters::activity::SystemAgentActivityAdapter;
 use crate::adapters::claude::ClaudeRuntimeSettingsCache;
 use crate::adapters::codex::CodexRuntimeDefaultsCache;
 use crate::adapters::process::SystemAgentProcessAdapter;
+use crate::commands::activity::AgentActivitiesResponse;
 use crate::commands::agent::AgentProcessStatesResponse;
 use crate::db::connection::connect_sqlite_path;
 use crate::db::migration::Migrator;
@@ -66,6 +72,7 @@ use crate::platform::codex_config::{
 };
 use crate::platform::workbuddy_config::WorkBuddyConfigWatcherState;
 use crate::repositories::comparison::ComparisonRepository;
+use crate::services::activity::SystemAgentActivityMonitor;
 use crate::services::comparison::ComparisonService;
 use crate::services::process::AgentProcessMonitor;
 use sea_orm_migration::MigratorTrait;
@@ -73,6 +80,7 @@ use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 const AGENT_PROCESS_STATES_CHANGED_EVENT: &str = "agent-process-states-changed";
+const AGENT_ACTIVITIES_CHANGED_EVENT: &str = "agent-activities-changed";
 const AGENT_PROCESS_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 const CODEX_CONFIG_CHANGED_EVENT: &str = "codex-config-changed";
 const CLAUDE_CONFIG_CHANGED_EVENT: &str = "claude-config-changed";
@@ -110,17 +118,44 @@ pub fn run() {
                 .get_webview_window("main")
                 .ok_or_else(|| std::io::Error::other("main window is unavailable"))?;
             let process_window = main_window.clone();
+            let activity_window = main_window.clone();
+            let activity_monitor = SystemAgentActivityMonitor::start(
+                SystemAgentActivityAdapter::default(),
+                Default::default(),
+                move |activities| {
+                    // A closed window ends delivery while the retained monitor shuts down normally.
+                    let _activity_event_delivered = activity_window
+                        .emit(
+                            AGENT_ACTIVITIES_CHANGED_EVENT,
+                            AgentActivitiesResponse::from(activities),
+                        )
+                        .is_ok();
+                },
+            )
+            .map_err(|_| std::io::Error::other("activity monitor failed to start"))?;
+            let activity_handle = activity_monitor.handle();
+            let process_activity_handle = activity_monitor.handle();
             let process_monitor = AgentProcessMonitor::start(
                 SystemAgentProcessAdapter::default(),
                 AGENT_PROCESS_REFRESH_INTERVAL,
                 move |states| {
-                    let _ = process_window.emit(
-                        AGENT_PROCESS_STATES_CHANGED_EVENT,
-                        AgentProcessStatesResponse::from(states),
-                    );
+                    process_activity_handle.update_process_states(states);
+                    // A closed window ends delivery while the retained monitor shuts down normally.
+                    let _process_event_delivered = process_window
+                        .emit(
+                            AGENT_PROCESS_STATES_CHANGED_EVENT,
+                            AgentProcessStatesResponse::from(states),
+                        )
+                        .is_ok();
                 },
             )
             .map_err(|_| std::io::Error::other("process monitor failed to start"))?;
+            activity_handle.update_process_states(
+                process_monitor
+                    .current_states()
+                    .map_err(|_| std::io::Error::other("initial process snapshot unavailable"))?,
+            );
+            app.manage(activity_monitor);
             app.manage(process_monitor);
 
             let callback_cache = runtime_defaults_cache.clone();
@@ -170,6 +205,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::activity::check_agent_activities,
             commands::agent::check_agent_processes,
             commands::claude::check_claude_login,
             commands::claude::run_claude_task,
