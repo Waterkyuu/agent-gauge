@@ -1,5 +1,23 @@
 type AgentKind = "claude" | "codex" | "workbuddy";
 
+type AgentActivityStatus = "running" | "waiting" | "finish" | "error";
+
+type AgentActivity = {
+	/** Opaque local identifier that does not reveal the product session ID. */
+	id: string;
+	/** Agent product that owns the observed task. */
+	agent: AgentKind;
+	/** Product-derived lifecycle normalized for the run board. */
+	status: AgentActivityStatus;
+	/** Latest source observation time in Unix milliseconds. */
+	updatedAtMs: number;
+};
+
+type AgentActivitiesResponse = {
+	/** Recent task summaries ordered by latest source activity. */
+	activities: AgentActivity[];
+};
+
 type AgentProcessStates = {
 	/** Whether a Claude Code process is currently running. */
 	claude: boolean;
@@ -66,6 +84,9 @@ type AgentRunResult = {
 };
 
 export type {
+	AgentActivitiesResponse,
+	AgentActivity,
+	AgentActivityStatus,
 	AgentKind,
 	AgentProcessStates,
 	AgentRunResult,

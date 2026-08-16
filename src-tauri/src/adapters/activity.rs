@@ -143,6 +143,10 @@ impl SystemAgentActivityAdapter {
 struct CodexRolloutEvent {
     /// Structured payload written by Codex for one rollout event.
     payload: Option<CodexRolloutPayload>,
+    /// Official App Server notification method when protocol events are persisted.
+    method: Option<String>,
+    /// Official App Server notification parameters.
+    params: Option<CodexNotificationParams>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -157,10 +161,38 @@ struct CodexRolloutPayload {
 }
 
 #[derive(Debug, Deserialize)]
+struct CodexNotificationParams {
+    /// Current thread lifecycle for thread/status/changed notifications.
+    status: Option<CodexThreadStatus>,
+    /// Current or terminal turn lifecycle for turn notifications.
+    turn: Option<CodexTurnStatus>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexThreadStatus {
+    /// Thread lifecycle discriminator such as active or systemError.
+    #[serde(rename = "type")]
+    status_type: String,
+    /// Reasons an active turn cannot proceed without the user.
+    #[serde(rename = "activeFlags", default)]
+    active_flags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexTurnStatus {
+    /// Official turn lifecycle such as inProgress, completed, interrupted, or failed.
+    status: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct ClaudeTranscriptEvent {
     /// Transcript event discriminator.
     #[serde(rename = "type")]
-    event_type: String,
+    event_type: Option<String>,
+    /// Official Claude Code hook lifecycle discriminator.
+    hook_event_name: Option<String>,
+    /// Official Notification subtype such as permission_prompt or idle_prompt.
+    notification_type: Option<String>,
     /// System-event subtype used for terminal failures.
     subtype: Option<String>,
     /// Conversation message carried by user and assistant events.
@@ -209,6 +241,49 @@ fn codex_status_from_jsonl(contents: &str, process_running: bool) -> Option<Agen
         .lines()
         .filter_map(|line| serde_json::from_str::<CodexRolloutEvent>(line).ok())
     {
+        match event.method.as_deref() {
+            Some("thread/status/changed") => {
+                if let Some(thread_status) = event
+                    .params
+                    .as_ref()
+                    .and_then(|params| params.status.as_ref())
+                {
+                    status = match thread_status.status_type.as_str() {
+                        "active"
+                            if thread_status.active_flags.iter().any(|flag| {
+                                matches!(flag.as_str(), "waitingOnApproval" | "waitingOnUserInput")
+                            }) =>
+                        {
+                            Some(AgentActivityStatus::Waiting)
+                        }
+                        "active" => Some(AgentActivityStatus::Running),
+                        "idle" => Some(AgentActivityStatus::Finish),
+                        "systemError" => Some(AgentActivityStatus::Error),
+                        _ => status,
+                    };
+                }
+                continue;
+            }
+            Some("turn/started") => {
+                status = Some(AgentActivityStatus::Running);
+                continue;
+            }
+            Some("turn/completed") => {
+                status = match event
+                    .params
+                    .as_ref()
+                    .and_then(|params| params.turn.as_ref())
+                    .map(|turn| turn.status.as_str())
+                {
+                    Some("completed") => Some(AgentActivityStatus::Finish),
+                    Some("interrupted" | "failed") => Some(AgentActivityStatus::Error),
+                    Some("inProgress") => Some(AgentActivityStatus::Running),
+                    _ => status,
+                };
+                continue;
+            }
+            _ => {}
+        }
         let Some(payload) = event.payload else {
             continue;
         };
@@ -271,6 +346,34 @@ fn claude_status_from_jsonl(contents: &str, process_running: bool) -> Option<Age
         .lines()
         .filter_map(|line| serde_json::from_str::<ClaudeTranscriptEvent>(line).ok())
     {
+        match event.hook_event_name.as_deref() {
+            Some("PermissionRequest") => {
+                status = Some(AgentActivityStatus::Waiting);
+                continue;
+            }
+            Some("Notification")
+                if matches!(
+                    event.notification_type.as_deref(),
+                    Some("permission_prompt" | "idle_prompt" | "elicitation_dialog")
+                ) =>
+            {
+                status = Some(AgentActivityStatus::Waiting);
+                continue;
+            }
+            Some("Stop") => {
+                status = Some(AgentActivityStatus::Finish);
+                continue;
+            }
+            Some("StopFailure") => {
+                status = Some(AgentActivityStatus::Error);
+                continue;
+            }
+            Some("UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure") => {
+                status = Some(AgentActivityStatus::Running);
+                continue;
+            }
+            _ => {}
+        }
         if event.is_api_error_message || event.subtype.as_deref() == Some("api_error") {
             status = Some(AgentActivityStatus::Error);
             pending_question = None;
@@ -279,8 +382,8 @@ fn claude_status_from_jsonl(contents: &str, process_running: bool) -> Option<Age
         let Some(message) = event.message else {
             continue;
         };
-        match (event.event_type.as_str(), message.role.as_str()) {
-            ("user", "user") => {
+        match (event.event_type.as_deref(), message.role.as_str()) {
+            (Some("user"), "user") => {
                 let answered_question = match &message.content {
                     Some(ClaudeTranscriptContent::Text(text)) => {
                         let _ = text;
@@ -298,7 +401,7 @@ fn claude_status_from_jsonl(contents: &str, process_running: bool) -> Option<Age
                     }
                 }
             }
-            ("assistant", "assistant") => {
+            (Some("assistant"), "assistant") => {
                 if let Some(ClaudeTranscriptContent::Blocks(blocks)) = &message.content {
                     if let Some(question) = blocks.iter().find(|block| {
                         block.block_type == "tool_use"
@@ -610,6 +713,32 @@ mod tests {
     }
 
     #[test]
+    fn codex_uses_official_thread_and_turn_notifications() {
+        let waiting_for_approval = r#"{"method":"turn/started","params":{"turn":{"status":"inProgress"}}}
+{"method":"thread/status/changed","params":{"status":{"type":"active","activeFlags":["waitingOnApproval"]}}}"#;
+        let waiting_for_answer = r#"{"method":"thread/status/changed","params":{"status":{"type":"active","activeFlags":["waitingOnUserInput"]}}}"#;
+        let completed = r#"{"method":"turn/completed","params":{"turn":{"status":"completed"}}}"#;
+        let failed = r#"{"method":"turn/completed","params":{"turn":{"status":"failed"}}}"#;
+
+        assert_eq!(
+            codex_status_from_jsonl(waiting_for_approval, true),
+            Some(AgentActivityStatus::Waiting)
+        );
+        assert_eq!(
+            codex_status_from_jsonl(waiting_for_answer, true),
+            Some(AgentActivityStatus::Waiting)
+        );
+        assert_eq!(
+            codex_status_from_jsonl(completed, true),
+            Some(AgentActivityStatus::Finish)
+        );
+        assert_eq!(
+            codex_status_from_jsonl(failed, true),
+            Some(AgentActivityStatus::Error)
+        );
+    }
+
+    #[test]
     fn codex_interruption_and_disappeared_active_process_are_errors() {
         let interrupted = r#"{"type":"event_msg","payload":{"type":"task_started"}}
 {"type":"event_msg","payload":{"type":"turn_aborted"}}"#;
@@ -655,6 +784,33 @@ mod tests {
         );
         assert_eq!(
             claude_status_from_jsonl(&failed, true),
+            Some(AgentActivityStatus::Error)
+        );
+    }
+
+    #[test]
+    fn claude_uses_official_hook_lifecycle_events() {
+        let waiting_for_permission = r#"{"hook_event_name":"UserPromptSubmit"}
+{"hook_event_name":"PermissionRequest"}"#;
+        let waiting_after_notification =
+            r#"{"hook_event_name":"Notification","notification_type":"permission_prompt"}"#;
+        let completed = r#"{"hook_event_name":"Stop"}"#;
+        let failed = r#"{"hook_event_name":"StopFailure"}"#;
+
+        assert_eq!(
+            claude_status_from_jsonl(waiting_for_permission, true),
+            Some(AgentActivityStatus::Waiting)
+        );
+        assert_eq!(
+            claude_status_from_jsonl(waiting_after_notification, true),
+            Some(AgentActivityStatus::Waiting)
+        );
+        assert_eq!(
+            claude_status_from_jsonl(completed, true),
+            Some(AgentActivityStatus::Finish)
+        );
+        assert_eq!(
+            claude_status_from_jsonl(failed, true),
             Some(AgentActivityStatus::Error)
         );
     }
