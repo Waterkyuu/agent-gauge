@@ -43,6 +43,7 @@ pub(crate) async fn connect_sqlite_path(path: &Path) -> Result<DatabaseConnectio
         .map_sqlx_sqlite_opts(move |options| {
             options
                 .filename(&database_path)
+                .in_memory(false)
                 .create_if_missing(true)
                 .foreign_keys(true)
                 .journal_mode(SqliteJournalMode::Wal)
@@ -56,7 +57,7 @@ pub(crate) async fn connect_sqlite_path(path: &Path) -> Result<DatabaseConnectio
 
 #[cfg(test)]
 mod tests {
-    use super::connect_sqlite;
+    use super::{connect_sqlite, connect_sqlite_path};
     use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -104,6 +105,39 @@ mod tests {
             assert_eq!(foreign_keys, 1);
 
             database.close().await.expect("database should close");
+            std::fs::remove_file(path).expect("temporary database should be removable");
+        });
+    }
+
+    #[test]
+    fn persists_the_database_at_the_requested_path() {
+        tauri::async_runtime::block_on(async {
+            let (path, _) = temporary_database_url();
+            let database = connect_sqlite_path(&path)
+                .await
+                .expect("database file should connect");
+            database
+                .execute_unprepared("CREATE TABLE persistence_probe (id INTEGER PRIMARY KEY)")
+                .await
+                .expect("probe table should be created");
+            database.close().await.expect("database should close");
+
+            assert!(path.is_file(), "the requested SQLite file should exist");
+
+            let reopened = connect_sqlite_path(&path)
+                .await
+                .expect("database file should reopen");
+            let table = reopened
+                .query_one_raw(Statement::from_string(
+                    DatabaseBackend::Sqlite,
+                    "SELECT name FROM sqlite_master WHERE name = 'persistence_probe'".to_string(),
+                ))
+                .await
+                .expect("persisted schema should be readable");
+
+            assert!(table.is_some());
+
+            reopened.close().await.expect("database should close");
             std::fs::remove_file(path).expect("temporary database should be removable");
         });
     }
