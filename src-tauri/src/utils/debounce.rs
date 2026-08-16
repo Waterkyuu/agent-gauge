@@ -7,22 +7,17 @@ const EVENT_QUEUE_CAPACITY: usize = 1;
 const QUIET_PERIOD: Duration = Duration::from_millis(300);
 const MAXIMUM_DELAY: Duration = Duration::from_secs(1);
 
-/// Indicates that the debounce worker has already stopped accepting change signals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DebouncerStopped;
 
-/// Sends change signals without blocking the file-watcher callback thread.
+/// Non-blocking handle used by event producers.
 #[derive(Clone)]
 pub(crate) struct DebounceTrigger {
-    /// Bounded channel that collapses duplicate signals while one signal is already queued.
     sender: SyncSender<DebounceMessage>,
 }
 
 impl DebounceTrigger {
-    /// Queues a change for the debounce worker.
-    ///
-    /// This is called by event producers such as filesystem watchers. A full queue means another
-    /// change is already pending, so the new signal is safely treated as part of the same batch.
+    /// Queues a change, or merges it with the change already waiting in the bounded queue.
     pub(crate) fn signal_change(&self) -> Result<(), DebouncerStopped> {
         match self.sender.try_send(DebounceMessage::Changed) {
             Ok(()) | Err(TrySendError::Full(_)) => Ok(()),
@@ -31,20 +26,14 @@ impl DebounceTrigger {
     }
 }
 
-/// Owns one debounce worker and stops it when the surrounding watcher is dropped.
+/// Owns the debounce worker and joins it on drop.
 pub(crate) struct EventDebouncer {
-    /// Channel used by `Drop` to request worker shutdown.
     shutdown_sender: SyncSender<DebounceMessage>,
-    /// Join handle retained so the background thread cannot outlive this owner.
     worker: Option<JoinHandle<()>>,
 }
 
 impl EventDebouncer {
-    /// Starts a worker that runs `on_batch` after changes settle or reach the maximum delay.
-    ///
-    /// The returned trigger is cloned into event producers. Several rapid calls to
-    /// `signal_change` produce one callback after 300 milliseconds of silence, while continuous
-    /// calls still produce a callback at least once per second.
+    /// Runs `on_batch` after 300 ms of quiet, capped at one second per observed batch.
     pub(crate) fn start(
         on_batch: impl FnMut() + Send + 'static,
     ) -> io::Result<(Self, DebounceTrigger)> {
@@ -54,9 +43,7 @@ impl EventDebouncer {
         };
         let worker = thread::Builder::new()
             .name("event-debouncer".to_string())
-            .spawn(move || {
-                run_debounce_worker(receiver, on_batch);
-            })?;
+            .spawn(move || run_debounce_worker(receiver, on_batch))?;
 
         Ok((
             Self {
@@ -70,218 +57,156 @@ impl EventDebouncer {
 
 impl Drop for EventDebouncer {
     fn drop(&mut self) {
-        if self
-            .shutdown_sender
-            .send(DebounceMessage::Shutdown)
-            .is_err()
-        {
-            // A disconnected receiver means the worker has already stopped, so no shutdown
-            // request remains to be delivered.
-        }
-
+        let _ = self.shutdown_sender.send(DebounceMessage::Shutdown);
         if let Some(worker) = self.worker.take() {
-            if worker.join().is_err() {
-                // A callback panic has already terminated the worker. Drop cannot propagate that
-                // panic without risking a second panic while another thread is unwinding.
-            }
+            let _ = worker.join();
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 enum DebounceMessage {
     Changed,
     Shutdown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DebounceDecision {
-    /// No change is waiting for a callback.
-    Idle,
-    /// A change is pending and the worker should wait for the remaining duration.
-    Wait(Duration),
-    /// The quiet period or maximum delay has elapsed, so the callback should run.
-    Run,
+fn run_debounce_worker(receiver: Receiver<DebounceMessage>, on_batch: impl FnMut()) {
+    run_debounce_worker_with_policy(receiver, QUIET_PERIOD, MAXIMUM_DELAY, on_batch);
 }
 
-/// Tracks one batch using timestamps supplied by the worker.
-///
-/// Keeping this timing decision separate from channels and threads makes the boundary conditions
-/// deterministic to test without sleeping or depending on scheduler timing.
-struct DebounceSchedule {
-    /// Required silence after the newest change before the callback may run.
+fn run_debounce_worker_with_policy(
+    receiver: Receiver<DebounceMessage>,
     quiet_period: Duration,
-    /// Longest time a continuous burst may postpone the callback.
     maximum_delay: Duration,
-    /// Time of the first change in the current batch.
-    first_change_at: Option<Instant>,
-    /// Time of the newest change in the current batch.
-    latest_change_at: Option<Instant>,
-}
-
-impl DebounceSchedule {
-    /// Creates an idle schedule using the caller's quiet period and maximum batch delay.
-    fn new(quiet_period: Duration, maximum_delay: Duration) -> Self {
-        Self {
-            quiet_period,
-            maximum_delay,
-            first_change_at: None,
-            latest_change_at: None,
-        }
-    }
-
-    /// Adds a change to the current batch or starts a new batch when the schedule is idle.
-    fn record_change(&mut self, changed_at: Instant) {
-        self.first_change_at.get_or_insert(changed_at);
-        self.latest_change_at = Some(changed_at);
-    }
-
-    /// Returns whether the worker should stay idle, wait longer, or run its callback now.
-    fn decision_at(&self, now: Instant) -> DebounceDecision {
-        let (Some(first_change_at), Some(latest_change_at)) =
-            (self.first_change_at, self.latest_change_at)
-        else {
-            return DebounceDecision::Idle;
-        };
-
-        let quiet_elapsed = now.saturating_duration_since(latest_change_at);
-        let total_elapsed = now.saturating_duration_since(first_change_at);
-        if quiet_elapsed >= self.quiet_period || total_elapsed >= self.maximum_delay {
-            return DebounceDecision::Run;
-        }
-
-        DebounceDecision::Wait(
-            self.quiet_period
-                .saturating_sub(quiet_elapsed)
-                .min(self.maximum_delay.saturating_sub(total_elapsed)),
-        )
-    }
-
-    /// Clears the completed batch so the next change starts with a fresh maximum-delay window.
-    fn mark_run(&mut self) {
-        self.first_change_at = None;
-        self.latest_change_at = None;
-    }
-}
-
-impl Default for DebounceSchedule {
-    fn default() -> Self {
-        Self::new(QUIET_PERIOD, MAXIMUM_DELAY)
-    }
-}
-
-/// Receives change signals until shutdown and executes one callback for each settled batch.
-fn run_debounce_worker(receiver: Receiver<DebounceMessage>, mut on_batch: impl FnMut()) {
-    let mut schedule = DebounceSchedule::default();
-
+    mut on_batch: impl FnMut(),
+) {
     loop {
         match receiver.recv() {
-            Ok(DebounceMessage::Changed) => schedule.record_change(Instant::now()),
+            Ok(DebounceMessage::Changed) => {}
             Ok(DebounceMessage::Shutdown) | Err(_) => return,
         }
 
+        let first_change_at = Instant::now();
+        let mut latest_change_at = first_change_at;
+
         loop {
-            match schedule.decision_at(Instant::now()) {
-                DebounceDecision::Idle => break,
-                DebounceDecision::Run => {
-                    schedule.mark_run();
+            let wait = remaining_wait(
+                first_change_at,
+                latest_change_at,
+                Instant::now(),
+                quiet_period,
+                maximum_delay,
+            );
+            if wait.is_zero() {
+                on_batch();
+                break;
+            }
+
+            match receiver.recv_timeout(wait) {
+                Ok(DebounceMessage::Changed) => latest_change_at = Instant::now(),
+                Ok(DebounceMessage::Shutdown) | Err(RecvTimeoutError::Disconnected) => return,
+                Err(RecvTimeoutError::Timeout) => {
                     on_batch();
                     break;
                 }
-                DebounceDecision::Wait(wait) => match receiver.recv_timeout(wait) {
-                    Ok(DebounceMessage::Changed) => schedule.record_change(Instant::now()),
-                    Ok(DebounceMessage::Shutdown) | Err(RecvTimeoutError::Disconnected) => return,
-                    Err(RecvTimeoutError::Timeout) => {}
-                },
             }
         }
     }
 }
 
+fn remaining_wait(
+    first_change_at: Instant,
+    latest_change_at: Instant,
+    now: Instant,
+    quiet_period: Duration,
+    maximum_delay: Duration,
+) -> Duration {
+    quiet_period
+        .saturating_sub(now.saturating_duration_since(latest_change_at))
+        .min(maximum_delay.saturating_sub(now.saturating_duration_since(first_change_at)))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DebounceDecision, DebounceSchedule};
+    use super::{
+        remaining_wait, run_debounce_worker_with_policy, DebounceMessage, MAXIMUM_DELAY,
+        QUIET_PERIOD,
+    };
+    use std::sync::mpsc;
+    use std::thread;
     use std::time::{Duration, Instant};
 
     #[test]
-    fn default_schedule_uses_the_shared_timing_policy() {
-        let start = Instant::now();
-        let mut schedule = DebounceSchedule::default();
-        schedule.record_change(start);
+    fn worker_coalesces_queued_changes_into_one_callback() {
+        let (message_sender, message_receiver) = mpsc::sync_channel(4);
+        let (callback_sender, callback_receiver) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            run_debounce_worker_with_policy(
+                message_receiver,
+                Duration::from_millis(10),
+                Duration::from_millis(50),
+                move || callback_sender.send(()).unwrap(),
+            );
+        });
 
-        assert_eq!(
-            schedule.decision_at(start + Duration::from_millis(299)),
-            DebounceDecision::Wait(Duration::from_millis(1))
-        );
-        assert_eq!(
-            schedule.decision_at(start + Duration::from_millis(300)),
-            DebounceDecision::Run
-        );
+        for _ in 0..3 {
+            message_sender.send(DebounceMessage::Changed).unwrap();
+        }
 
-        let mut continuous_schedule = DebounceSchedule::default();
-        continuous_schedule.record_change(start);
-        continuous_schedule.record_change(start + Duration::from_millis(300));
-        continuous_schedule.record_change(start + Duration::from_millis(600));
-        continuous_schedule.record_change(start + Duration::from_millis(900));
-        assert_eq!(
-            continuous_schedule.decision_at(start + Duration::from_millis(999)),
-            DebounceDecision::Wait(Duration::from_millis(1))
-        );
-        assert_eq!(
-            continuous_schedule.decision_at(start + Duration::from_secs(1)),
-            DebounceDecision::Run
-        );
+        callback_receiver
+            .recv_timeout(Duration::from_millis(200))
+            .expect("queued changes should produce a callback");
+        assert!(callback_receiver
+            .recv_timeout(Duration::from_millis(30))
+            .is_err());
+
+        message_sender.send(DebounceMessage::Shutdown).unwrap();
+        worker.join().unwrap();
     }
 
     #[test]
-    fn waits_until_the_latest_change_has_been_quiet() {
-        let start = Instant::now();
-        let mut schedule =
-            DebounceSchedule::new(Duration::from_millis(100), Duration::from_millis(500));
+    fn worker_discards_a_pending_batch_on_shutdown() {
+        let (message_sender, message_receiver) = mpsc::sync_channel(2);
+        let (callback_sender, callback_receiver) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            run_debounce_worker_with_policy(
+                message_receiver,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                move || callback_sender.send(()).unwrap(),
+            );
+        });
 
-        schedule.record_change(start);
-        schedule.record_change(start + Duration::from_millis(80));
+        message_sender.send(DebounceMessage::Changed).unwrap();
+        message_sender.send(DebounceMessage::Shutdown).unwrap();
+        worker.join().unwrap();
 
-        assert_eq!(
-            schedule.decision_at(start + Duration::from_millis(100)),
-            DebounceDecision::Wait(Duration::from_millis(80))
-        );
-        assert_eq!(
-            schedule.decision_at(start + Duration::from_millis(180)),
-            DebounceDecision::Run
-        );
+        assert!(callback_receiver.try_recv().is_err());
     }
 
     #[test]
-    fn runs_at_the_maximum_delay_during_continuous_changes() {
+    fn wait_ends_at_the_quiet_or_maximum_deadline() {
         let start = Instant::now();
-        let mut schedule =
-            DebounceSchedule::new(Duration::from_millis(100), Duration::from_millis(300));
-
-        schedule.record_change(start);
-        schedule.record_change(start + Duration::from_millis(90));
-        schedule.record_change(start + Duration::from_millis(180));
-        schedule.record_change(start + Duration::from_millis(270));
 
         assert_eq!(
-            schedule.decision_at(start + Duration::from_millis(299)),
-            DebounceDecision::Wait(Duration::from_millis(1))
+            remaining_wait(
+                start,
+                start,
+                start + Duration::from_millis(299),
+                QUIET_PERIOD,
+                MAXIMUM_DELAY,
+            ),
+            Duration::from_millis(1)
         );
         assert_eq!(
-            schedule.decision_at(start + Duration::from_millis(300)),
-            DebounceDecision::Run
+            remaining_wait(
+                start,
+                start + Duration::from_millis(900),
+                start + MAXIMUM_DELAY,
+                QUIET_PERIOD,
+                MAXIMUM_DELAY,
+            ),
+            Duration::ZERO
         );
-    }
-
-    #[test]
-    fn returns_to_idle_after_the_callback_runs() {
-        let start = Instant::now();
-        let mut schedule =
-            DebounceSchedule::new(Duration::from_millis(100), Duration::from_millis(500));
-        schedule.record_change(start);
-
-        schedule.mark_run();
-
-        assert_eq!(schedule.decision_at(start), DebounceDecision::Idle);
     }
 }
