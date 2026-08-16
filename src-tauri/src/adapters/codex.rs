@@ -365,7 +365,8 @@ struct TokenUsageBreakdown {
     input_tokens: u64,
     /// Input tokens served from an existing cache entry.
     cached_input_tokens: u64,
-    /// Input tokens written into the prompt cache.
+    /// Input tokens written into the prompt cache, or zero when the source omits this metric.
+    #[serde(default)]
     cache_write_input_tokens: u64,
     /// Tokens generated in the model output.
     output_tokens: u64,
@@ -861,6 +862,30 @@ wait "$reader_pid"
 
         assert_eq!(output.metrics.tool_calls.len(), 1);
         assert_eq!(output.metrics.tool_calls[0].name, "github.search");
+    }
+
+    #[test]
+    fn accepts_token_usage_without_cache_write_tokens() {
+        let (sender, receiver) = mpsc::sync_channel(3);
+        for fixture in [
+            r#"{"method":"item/agentMessage/delta","params":{"delta":"OK"}}"#,
+            r#"{"method":"thread/tokenUsage/updated","params":{"tokenUsage":{"last":{"totalTokens":16400,"inputTokens":16395,"cachedInputTokens":9984,"outputTokens":5,"reasoningOutputTokens":0}}}}"#,
+            r#"{"method":"turn/completed","params":{"turn":{"status":"completed"}}}"#,
+        ] {
+            sender
+                .send(Ok(fixture.to_string()))
+                .expect("fixture should be queued");
+        }
+
+        let output = collect_run_events(&receiver, Instant::now())
+            .expect("current Codex token usage should complete");
+        let usage = output
+            .metrics
+            .token_usage
+            .expect("token usage should be retained");
+
+        assert_eq!(output.response, "OK");
+        assert_eq!(usage.cache_write_input_tokens, 0);
     }
 
     #[test]
