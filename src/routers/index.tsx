@@ -11,6 +11,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 
 const ComparisonPage = lazy(() => import("@/pages/comparison"));
+const ComparisonHistoryPage = lazy(() => import("@/pages/comparison-history"));
 const RunBoardPage = lazy(() => import("@/pages/run-board"));
 
 /** Displays a lightweight page skeleton while a route chunk is loading. */
@@ -43,6 +44,10 @@ const RoutedApplication = () => {
 			<Suspense fallback={<RouteLoadingFallback />}>
 				<Routes>
 					<Route element={<ComparisonPage />} path="/" />
+					<Route
+						element={<ComparisonHistoryPage />}
+						path="/comparison-history"
+					/>
 					<Route element={<RunBoardPage />} path="/runs" />
 					<Route element={<Navigate replace to="/" />} path="*" />
 				</Routes>

@@ -1,5 +1,6 @@
 import {
 	ChartColumn,
+	ClockArrowRotateLeft,
 	Globe,
 	LayoutColumns3,
 	LayoutSideContent,
@@ -21,6 +22,11 @@ type AppShellProps = {
 
 const NAVIGATION_ITEMS = [
 	{ path: "/", labelKey: "navigation.compare", icon: ScalesBalanced },
+	{
+		path: "/comparison-history",
+		labelKey: "navigation.comparisonHistory",
+		icon: ClockArrowRotateLeft,
+	},
 	{ path: "/runs", labelKey: "navigation.runs", icon: LayoutColumns3 },
 ] as const;
 
