@@ -15,12 +15,16 @@ pub(crate) enum AppError {
     CodexTimedOut,
     ProcessProbeFailed,
     WorkBuddyNotInstalled,
+    WorkBuddyConfigReadFailed,
     WorkBuddyProbeFailed,
     WorkBuddyProtocolFailed,
     WorkBuddyNeedsInput,
     WorkBuddyTaskFailed,
     WorkBuddyTimedOut,
     InvalidQuery,
+    InvalidComparison,
+    ComparisonDatabaseFailed,
+    ComparisonNotFound,
     WorkerFailed,
 }
 
@@ -89,6 +93,10 @@ impl From<AppError> for IpcError {
                 code: "WORKBUDDY_NOT_INSTALLED",
                 message: "未找到本地 WorkBuddy。",
             },
+            AppError::WorkBuddyConfigReadFailed => Self {
+                code: "WORKBUDDY_CONFIG_READ_FAILED",
+                message: "无法读取本地 WorkBuddy 模型配置。",
+            },
             AppError::WorkBuddyProbeFailed => Self {
                 code: "WORKBUDDY_PROBE_FAILED",
                 message: "无法检查本地 WorkBuddy 登录状态。",
@@ -112,6 +120,18 @@ impl From<AppError> for IpcError {
             AppError::InvalidQuery => Self {
                 code: "INVALID_QUERY",
                 message: "任务内容不能为空且不能超过 16000 个字符。",
+            },
+            AppError::InvalidComparison => Self {
+                code: "INVALID_COMPARISON",
+                message: "对比记录包含无效或重复的数据。",
+            },
+            AppError::ComparisonDatabaseFailed => Self {
+                code: "COMPARISON_DATABASE_FAILED",
+                message: "无法访问本地历史对比数据库。",
+            },
+            AppError::ComparisonNotFound => Self {
+                code: "COMPARISON_NOT_FOUND",
+                message: "未找到对应的历史对比记录。",
             },
             AppError::WorkerFailed => Self {
                 code: "WORKER_FAILED",

@@ -3,7 +3,7 @@ import { Button, Card, TextArea, Toast } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { checkAgentProcesses } from "@/api/agent";
+import { checkAgentProcesses, onAgentProcessStatesChanged } from "@/api/agent";
 import {
 	checkClaudeLogin,
 	onClaudeConfigChanged,
@@ -14,13 +14,21 @@ import {
 	onCodexConfigChanged,
 	runCodexTask,
 } from "@/api/codex";
-import { checkWorkBuddyLogin, runWorkBuddyTask } from "@/api/workbuddy";
+import { saveComparisonHistory } from "@/api/comparison";
+import {
+	checkWorkBuddyConfig,
+	checkWorkBuddyLogin,
+	onWorkBuddyConfigChanged,
+	runWorkBuddyTask,
+} from "@/api/workbuddy";
 import type {
 	AgentKind,
 	AgentProcessStates,
 	AgentRunResult,
+	AgentRuntimeConfig,
 	AgentRuntimeStatus,
 } from "@/types/agent";
+import type { ComparisonResultInput } from "@/types/comparison";
 import { getErrorMessage } from "@/utils/error";
 import { AgentComparisonCard } from "./components/agent-comparison-card";
 import { AgentSelectionCard } from "./components/agent-selection-card";
@@ -95,20 +103,6 @@ const areRuntimeStatusesEqual = (
 	left.authenticationMethod === right.authenticationMethod &&
 	left.model === right.model &&
 	left.reasoningEffort === right.reasoningEffort;
-
-/**
- * Compares one complete running-process snapshot.
- *
- * @example
- * areProcessStatesEqual(previousProcesses, nextProcesses);
- */
-const areProcessStatesEqual = (
-	left: AgentProcessStates,
-	right: AgentProcessStates,
-) =>
-	left.claude === right.claude &&
-	left.codex === right.codex &&
-	left.workbuddy === right.workbuddy;
 
 /**
  * Resolves a product's selectable state from its live login and process probes.
@@ -199,18 +193,22 @@ const ComparisonPage = () => {
 	const [processState, setProcessState] = useState<ProcessState>({
 		status: "checking",
 	});
+	const [workBuddyConfig, setWorkBuddyConfig] = useState<AgentRuntimeConfig>({
+		model: null,
+		reasoningEffort: null,
+	});
 	const [runStates, setRunStates] = useState<Record<AgentKind, AgentRunState>>({
 		claude: { status: "idle" },
 		codex: { status: "idle" },
 		workbuddy: { status: "idle" },
 	});
 	const loginStatesRef = useRef(loginStates);
-	const processStateRef = useRef(processState);
-	const activeLoginProbeCountRef = useRef(0);
-	const refreshProcessesAfterLoginRef = useRef<() => void>(() => {});
 	const isRunning = Object.values(runStates).some(
 		(state) => state.status === "running",
 	);
+	const isWorkBuddyLoggedIn =
+		loginStates.workbuddy.status === "resolved" &&
+		loginStates.workbuddy.value.loggedIn;
 
 	useEffect(() => {
 		if (isRunning) {
@@ -228,7 +226,6 @@ const ComparisonPage = () => {
 			}
 
 			pendingAgents.add(agent);
-			activeLoginProbeCountRef.current += 1;
 			AGENT_LOGIN_CHECKS[agent]()
 				.then((value) => {
 					if (isActive) {
@@ -259,13 +256,8 @@ const ComparisonPage = () => {
 				})
 				.finally(() => {
 					pendingAgents.delete(agent);
-					activeLoginProbeCountRef.current -= 1;
 					if (isActive && queuedAgents.delete(agent)) {
 						refreshLoginState(agent);
-						return;
-					}
-					if (activeLoginProbeCountRef.current === 0) {
-						refreshProcessesAfterLoginRef.current();
 					}
 				});
 		};
@@ -312,45 +304,96 @@ const ComparisonPage = () => {
 
 	useEffect(() => {
 		let isActive = true;
-		let isChecking = false;
 
-		/** Refreshes the local process snapshot outside authentication probe windows. */
-		const refreshAgentProcesses = async () => {
-			if (isChecking || activeLoginProbeCountRef.current > 0) {
+		/**
+		 * Applies a WorkBuddy configuration snapshot received after the listener is active.
+		 *
+		 * @example
+		 * applyWorkBuddyConfig({ model: "kimi-k3", reasoningEffort: "high" });
+		 */
+		const applyWorkBuddyConfig = (config: AgentRuntimeConfig) => {
+			if (!isActive) {
 				return;
 			}
-			isChecking = true;
-			try {
-				const value = await checkAgentProcesses();
-				if (isActive) {
-					const previous = processStateRef.current;
-					if (
-						previous.status === "resolved" &&
-						areProcessStatesEqual(previous.value, value)
-					) {
-						return;
-					}
-					const next: ProcessState = { status: "resolved", value };
-					processStateRef.current = next;
-					setProcessState(next);
-				}
-			} catch {
-				if (isActive && processStateRef.current.status === "checking") {
-					const next: ProcessState = { status: "failed" };
-					processStateRef.current = next;
-					setProcessState(next);
-				}
-			} finally {
-				isChecking = false;
-			}
+			setWorkBuddyConfig(config);
 		};
 
-		refreshProcessesAfterLoginRef.current = refreshAgentProcesses;
-		refreshAgentProcesses();
+		const stopListening = onWorkBuddyConfigChanged(applyWorkBuddyConfig);
 
 		return () => {
 			isActive = false;
-			refreshProcessesAfterLoginRef.current = () => {};
+			stopListening.then(
+				(stop) => stop(),
+				() => {},
+			);
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!isWorkBuddyLoggedIn) {
+			return;
+		}
+
+		let isActive = true;
+		checkWorkBuddyConfig()
+			.then((config) => {
+				if (isActive) {
+					setWorkBuddyConfig(config);
+				}
+			})
+			.catch(() => {
+				// Keep the last valid configuration when the LevelDB read fails.
+			});
+
+		return () => {
+			isActive = false;
+		};
+	}, [isWorkBuddyLoggedIn]);
+
+	useEffect(() => {
+		let isActive = true;
+
+		/**
+		 * Applies one native process snapshot while the comparison page remains mounted.
+		 *
+		 * @example
+		 * applyProcessStates({ claude: false, codex: true, workbuddy: false });
+		 */
+		const applyProcessStates = (value: AgentProcessStates) => {
+			if (!isActive) {
+				return;
+			}
+			setProcessState({ status: "resolved", value });
+		};
+
+		const stopListening = onAgentProcessStatesChanged(applyProcessStates);
+		stopListening
+			.then(() => checkAgentProcesses())
+			.then((value) => {
+				if (!isActive) {
+					return;
+				}
+				setProcessState((current) =>
+					current.status === "checking"
+						? { status: "resolved", value }
+						: current,
+				);
+			})
+			.catch(() => {
+				if (!isActive) {
+					return;
+				}
+				setProcessState((current) =>
+					current.status === "checking" ? { status: "failed" } : current,
+				);
+			});
+
+		return () => {
+			isActive = false;
+			stopListening.then(
+				(stop) => stop(),
+				() => {},
+			);
 		};
 	}, []);
 
@@ -432,8 +475,15 @@ const ComparisonPage = () => {
 				: { status: "idle" },
 		});
 
-		await Promise.all(
+		const historyResults = await Promise.all(
 			activeAgents.map(async (agent) => {
+				const loginState = loginStates[agent];
+				const loginStatus =
+					loginState.status === "resolved" ? loginState.value : null;
+				const runtimeStatus =
+					agent === "workbuddy" && loginStatus?.loggedIn
+						? { ...loginStatus, ...workBuddyConfig }
+						: loginStatus;
 				try {
 					const result = await AGENT_TASK_RUNNERS[agent](normalizedQuery);
 					setRunStates((current) => ({
@@ -447,12 +497,20 @@ const ComparisonPage = () => {
 						}),
 						{ description: t("viewResult") },
 					);
+					return {
+						agent,
+						model: runtimeStatus?.model ?? null,
+						reasoningEffort: runtimeStatus?.reasoningEffort ?? null,
+						status: "succeeded",
+						result,
+					} satisfies ComparisonResultInput;
 				} catch (error) {
+					const errorMessage = getErrorMessage(error, t("requestFailed"));
 					setRunStates((current) => ({
 						...current,
 						[agent]: {
 							status: "failed",
-							errorMessage: getErrorMessage(error, t("requestFailed")),
+							errorMessage,
 						},
 					}));
 					Toast.toast.danger(
@@ -462,9 +520,24 @@ const ComparisonPage = () => {
 						}),
 						{ description: t("viewResult") },
 					);
+					return {
+						agent,
+						model: runtimeStatus?.model ?? null,
+						reasoningEffort: runtimeStatus?.reasoningEffort ?? null,
+						status: "failed",
+						errorMessage,
+					} satisfies ComparisonResultInput;
 				}
 			}),
 		);
+		try {
+			await saveComparisonHistory({
+				query: normalizedQuery,
+				results: historyResults,
+			});
+		} catch {
+			Toast.toast.danger(t("comparisonHistory.saveFailed"));
+		}
 	};
 
 	return (
@@ -494,8 +567,12 @@ const ComparisonPage = () => {
 					<fieldset aria-label={t("agentSelection")}>
 						{AGENT_KINDS.map((agent) => {
 							const loginState = loginStates[agent];
-							const runtimeStatus =
+							const loginStatus =
 								loginState.status === "resolved" ? loginState.value : null;
+							const runtimeStatus =
+								agent === "workbuddy" && loginStatus?.loggedIn
+									? { ...loginStatus, ...workBuddyConfig }
+									: loginStatus;
 							const isSelected =
 								selectedAgents.includes(agent) && agentDisplays[agent].isReady;
 

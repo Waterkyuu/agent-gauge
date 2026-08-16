@@ -1,6 +1,7 @@
+use crate::utils::debounce::EventDebouncer;
 use notify::{recommended_watcher, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Native outcomes relevant to the Codex runtime-defaults cache.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +14,8 @@ pub(crate) enum CodexConfigWatchEvent {
 pub(crate) struct CodexConfigWatcher {
     /// Live watcher handle retained to keep all operating-system subscriptions active.
     _watcher: Mutex<RecommendedWatcher>,
+    /// Debounce worker that merges duplicate filesystem events before notifying consumers.
+    _debouncer: EventDebouncer,
 }
 
 impl CodexConfigWatcher {
@@ -33,9 +36,18 @@ impl CodexConfigWatcher {
             return Ok(None);
         }
 
+        let on_event = Arc::new(on_event);
+        let debounced_on_event = Arc::clone(&on_event);
+        let (debouncer, debounce_trigger) = EventDebouncer::start(move || {
+            debounced_on_event(CodexConfigWatchEvent::Changed);
+        })
+        .map_err(notify::Error::io)?;
+
         let mut watcher = recommended_watcher(move |result: notify::Result<Event>| match result {
             Ok(event) if event_affects_config(&event, &config_paths) => {
-                on_event(CodexConfigWatchEvent::Changed);
+                if debounce_trigger.signal_change().is_err() {
+                    on_event(CodexConfigWatchEvent::Failed);
+                }
             }
             Ok(_) => {}
             Err(_) => {
@@ -53,6 +65,7 @@ impl CodexConfigWatcher {
 
         Ok(Some(Self {
             _watcher: Mutex::new(watcher),
+            _debouncer: debouncer,
         }))
     }
 }

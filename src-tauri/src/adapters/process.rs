@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use crate::platform::process::running_process_names;
 use std::path::Path;
+use sysinfo::System;
 
 /// One point-in-time snapshot of whether each supported Agent has a matching local process.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -15,19 +16,31 @@ pub(crate) struct AgentProcessStates {
 
 /// Abstracts operating-system process discovery for the service and its tests.
 pub(crate) trait AgentProcessAdapter {
-    fn check_processes(&self) -> Result<AgentProcessStates, AppError>;
+    fn check_processes(&mut self) -> Result<AgentProcessStates, AppError>;
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct SystemAgentProcessAdapter;
+pub(crate) struct SystemAgentProcessAdapter {
+    /// Native process table retained and refreshed by the application-wide monitor.
+    system: System,
+}
 
-impl AgentProcessAdapter for SystemAgentProcessAdapter {
-    fn check_processes(&self) -> Result<AgentProcessStates, AppError> {
-        running_process_names().map(process_states_from_names)
+impl Default for SystemAgentProcessAdapter {
+    fn default() -> Self {
+        Self {
+            system: System::new(),
+        }
     }
 }
 
-/// Maps platform process observations to the normalized Agent running-state snapshot.
+impl AgentProcessAdapter for SystemAgentProcessAdapter {
+    fn check_processes(&mut self) -> Result<AgentProcessStates, AppError> {
+        Ok(process_states_from_names(running_process_names(
+            &mut self.system,
+        )))
+    }
+}
+
+/// Maps platform process observations to the shared Agent running-state snapshot.
 ///
 /// Matching intentionally uses exact executable basenames so helper renderers such as
 /// `Codex Helper` do not make an idle Agent appear active.
@@ -39,16 +52,16 @@ where
     let mut states = AgentProcessStates::default();
 
     for process_name in process_names {
-        let normalized_path = process_name
+        let lowercase_path = process_name
             .as_ref()
             .trim()
             .replace('\\', "/")
             .to_ascii_lowercase();
         // WorkBuddy's macOS bundle keeps the generic Electron executable name, so its containing
-        // application path is the stable identity available from `ps`.
+        // application path is the stable identity available from the native process table.
         let is_workbuddy_desktop =
-            normalized_path.ends_with("/workbuddy ai.app/contents/macos/electron");
-        let executable_name = Path::new(&normalized_path)
+            lowercase_path.ends_with("/workbuddy ai.app/contents/macos/electron");
+        let executable_name = Path::new(&lowercase_path)
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or_default();

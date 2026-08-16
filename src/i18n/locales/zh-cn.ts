@@ -12,6 +12,7 @@ const zhCN = {
 		},
 		navigation: {
 			compare: "性能对比",
+			comparisonHistory: "历史对比",
 			runs: "运行看板",
 		},
 		agentNames: {
@@ -75,6 +76,22 @@ const zhCN = {
 		responseTitle: "响应",
 		metricUnavailable: "不可用",
 		requestFailed: "任务执行失败，请重试。",
+		comparisonHistory: {
+			tagline: "本地性能记录",
+			title: "历史对比",
+			description:
+				"回看每一次性能比较的任务、运行配置、指标、工具调用和最终响应。",
+			listTitle: "对比记录",
+			loading: "正在加载历史记录",
+			loadingDetail: "正在加载对比详情",
+			loadFailed: "无法读取历史对比记录。",
+			detailFailed: "无法读取这条对比详情。",
+			emptyTitle: "还没有历史对比",
+			emptyDescription: "完成一次性能对比后，结果会自动保存在这里。",
+			selectPrompt: "选择一条历史记录查看完整结果。",
+			loadMore: "加载更多",
+			saveFailed: "结果已完成，但无法保存到历史对比。",
+		},
 		runBoard: {
 			title: "Agent 运行看板",
 			description:

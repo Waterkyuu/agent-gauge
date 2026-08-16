@@ -22,6 +22,8 @@ type AgentRuntimeStatus = {
 	reasoningEffort: string | null;
 };
 
+type AgentRuntimeConfig = Pick<AgentRuntimeStatus, "model" | "reasoningEffort">;
+
 type TokenUsage = {
 	/** Total tokens consumed by the task. */
 	totalTokens: number;
@@ -67,6 +69,7 @@ export type {
 	AgentKind,
 	AgentProcessStates,
 	AgentRunResult,
+	AgentRuntimeConfig,
 	AgentRuntimeStatus,
 	TokenUsage,
 	ToolCallMetric,

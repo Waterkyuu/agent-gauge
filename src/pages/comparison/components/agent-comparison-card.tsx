@@ -16,6 +16,10 @@ type AgentComparisonCardProps = {
 	isRunning: boolean;
 	/** Locale used for token number formatting. */
 	numberLocale: string;
+	/** Model configuration captured for a historical result. */
+	model?: string | null;
+	/** Reasoning configuration captured for a historical result. */
+	reasoningEffort?: string | null;
 };
 
 const TOOL_DURATION_WARNING_MS = 20_000;
@@ -62,6 +66,8 @@ const AgentComparisonCard = ({
 	errorMessage,
 	isRunning,
 	numberLocale,
+	model = null,
+	reasoningEffort = null,
 }: AgentComparisonCardProps) => {
 	const { t } = useTranslation();
 	const titleId = `comparison-${agent}-title`;
@@ -90,6 +96,22 @@ const AgentComparisonCard = ({
 					/>
 				) : null}
 			</header>
+			{model || reasoningEffort ? (
+				<dl className="mt-md grid grid-cols-2 gap-md rounded-lg bg-surface-soft px-md py-sm text-caption-sm">
+					<div className="min-w-0">
+						<dt className="text-mute">{t("currentModel")}</dt>
+						<dd className="mt-xs truncate font-mono text-ink">
+							{model ?? t("metricUnavailable")}
+						</dd>
+					</div>
+					<div className="min-w-0">
+						<dt className="text-mute">{t("reasoningEffort")}</dt>
+						<dd className="mt-xs truncate font-mono text-ink">
+							{reasoningEffort ?? t("metricUnavailable")}
+						</dd>
+					</div>
+				</dl>
+			) : null}
 
 			{isRunning ? (
 				<div className="mt-5" aria-label={t("agentRunRunning")} role="status">

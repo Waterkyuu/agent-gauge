@@ -366,6 +366,8 @@ struct TokenUsageBreakdown {
     /// Input tokens served from an existing cache entry.
     cached_input_tokens: u64,
     /// Input tokens written into the prompt cache.
+    /// Codex CLI 0.144.3 no longer returns `cacheWriteInputTokens`, so its absence defaults to zero.
+    #[serde(default)]
     cache_write_input_tokens: u64,
     /// Tokens generated in the model output.
     output_tokens: u64,
@@ -509,6 +511,9 @@ fn with_app_server<T>(
     let (event_sender, event_receiver) = mpsc::sync_channel(EVENT_QUEUE_CAPACITY);
     let reader_handle = thread::spawn(move || read_app_server_events(stdout, event_sender));
     let operation_result = operation(&mut stdin, &event_receiver);
+    // npm-installed Codex uses a launcher process. Closing its inherited input also lets the
+    // native App Server exit, so the stdout reader cannot outlive the launcher indefinitely.
+    drop(stdin);
     let termination_result = terminate_child(&mut child);
     let reader_result = reader_handle
         .join()
@@ -755,11 +760,57 @@ fn codex_executable_candidates() -> Vec<OsString> {
 mod tests {
     use super::{
         codex_executable_candidates, collect_run_events, runtime_settings_from_config_layers,
-        CodexRuntimeDefaultsCache, CodexRuntimeSettings,
+        with_app_server, CodexRuntimeDefaultsCache, CodexRuntimeSettings,
     };
     use crate::error::AppError;
     use std::sync::mpsc;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
+
+    #[cfg(unix)]
+    #[test]
+    fn closes_app_server_stdin_before_waiting_for_the_stdout_reader() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let script_path = std::env::temp_dir().join(format!(
+            "agent-gauge-codex-wrapper-test-{}",
+            std::process::id()
+        ));
+        std::fs::write(
+            &script_path,
+            r#"#!/bin/sh
+cat <&0 &
+reader_pid=$!
+(
+  sleep 2
+  kill "$reader_pid" 2>/dev/null
+) </dev/null >/dev/null 2>&1 &
+echo READY
+wait "$reader_pid"
+"#,
+        )
+        .expect("wrapper fixture should be written");
+        let mut permissions = std::fs::metadata(&script_path)
+            .expect("wrapper fixture metadata should be readable")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&script_path, permissions)
+            .expect("wrapper fixture should be executable");
+
+        let started_at = Instant::now();
+        let result = with_app_server(script_path.as_os_str(), |_stdin, receiver| {
+            let ready = super::receive_line(receiver, Duration::from_secs(1))?;
+            assert_eq!(ready.trim(), "READY");
+            Ok(())
+        });
+        let elapsed = started_at.elapsed();
+        std::fs::remove_file(script_path).expect("wrapper fixture should be removable");
+
+        assert_eq!(result, Ok(()));
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "cleanup waited for the detached server process: {elapsed:?}"
+        );
+    }
 
     #[cfg(target_os = "macos")]
     #[test]
@@ -812,6 +863,30 @@ mod tests {
 
         assert_eq!(output.metrics.tool_calls.len(), 1);
         assert_eq!(output.metrics.tool_calls[0].name, "github.search");
+    }
+
+    #[test]
+    fn accepts_token_usage_without_cache_write_tokens() {
+        let (sender, receiver) = mpsc::sync_channel(3);
+        for fixture in [
+            r#"{"method":"item/agentMessage/delta","params":{"delta":"OK"}}"#,
+            r#"{"method":"thread/tokenUsage/updated","params":{"tokenUsage":{"last":{"totalTokens":16400,"inputTokens":16395,"cachedInputTokens":9984,"outputTokens":5,"reasoningOutputTokens":0}}}}"#,
+            r#"{"method":"turn/completed","params":{"turn":{"status":"completed"}}}"#,
+        ] {
+            sender
+                .send(Ok(fixture.to_string()))
+                .expect("fixture should be queued");
+        }
+
+        let output = collect_run_events(&receiver, Instant::now())
+            .expect("current Codex token usage should complete");
+        let usage = output
+            .metrics
+            .token_usage
+            .expect("token usage should be retained");
+
+        assert_eq!(output.response, "OK");
+        assert_eq!(usage.cache_write_input_tokens, 0);
     }
 
     #[test]

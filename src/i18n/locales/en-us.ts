@@ -12,6 +12,7 @@ const enUS = {
 		},
 		navigation: {
 			compare: "Compare",
+			comparisonHistory: "History",
 			runs: "Run board",
 		},
 		agentNames: {
@@ -76,6 +77,24 @@ const enUS = {
 		responseTitle: "Response",
 		metricUnavailable: "Unavailable",
 		requestFailed: "The task failed. Please try again.",
+		comparisonHistory: {
+			tagline: "Local performance records",
+			title: "Comparison history",
+			description:
+				"Review every comparison task, runtime configuration, metric, tool call, and final response.",
+			listTitle: "Comparison records",
+			loading: "Loading comparison history",
+			loadingDetail: "Loading comparison detail",
+			loadFailed: "Comparison history could not be loaded.",
+			detailFailed: "This comparison detail could not be loaded.",
+			emptyTitle: "No comparison history yet",
+			emptyDescription:
+				"Complete a performance comparison and its results will appear here automatically.",
+			selectPrompt: "Select a history record to view its complete result.",
+			loadMore: "Load more",
+			saveFailed:
+				"The results finished, but comparison history could not be saved.",
+		},
 		runBoard: {
 			title: "Agent run board",
 			description:

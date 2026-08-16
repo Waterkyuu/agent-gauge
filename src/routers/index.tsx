@@ -11,6 +11,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 
 const ComparisonPage = lazy(() => import("@/pages/comparison"));
+const ComparisonHistoryPage = lazy(() => import("@/pages/comparison-history"));
 const RunBoardPage = lazy(() => import("@/pages/run-board"));
 
 /** Displays a lightweight page skeleton while a route chunk is loading. */
@@ -27,7 +28,7 @@ const RouteLoadingFallback = () => {
 			<div className="motion-safe:animate-pulse">
 				<div className="h-4 w-48 rounded-full bg-hairline" />
 				<div className="mt-5 h-10 max-w-2xl rounded-full bg-hairline" />
-				<div className="mt-4 h-5 max-w-xl rounded-full bg-hairline" />
+				<div className="mt-4 h-5 max-w-[36rem] rounded-full bg-hairline" />
 			</div>
 		</main>
 	);
@@ -43,6 +44,10 @@ const RoutedApplication = () => {
 			<Suspense fallback={<RouteLoadingFallback />}>
 				<Routes>
 					<Route element={<ComparisonPage />} path="/" />
+					<Route
+						element={<ComparisonHistoryPage />}
+						path="/comparison-history"
+					/>
 					<Route element={<RunBoardPage />} path="/runs" />
 					<Route element={<Navigate replace to="/" />} path="*" />
 				</Routes>
