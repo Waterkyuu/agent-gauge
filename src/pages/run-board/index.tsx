@@ -236,10 +236,11 @@ const RunBoardPage = () => {
 
 							<div
 								className={cn(
-									"min-h-48 flex-1 space-y-3 bg-surface-soft/50 p-3",
+									"min-h-48 max-h-[60vh] flex-1 space-y-3 overflow-y-auto overscroll-contain bg-surface-soft/50 p-3",
 									layout === "horizontal" &&
-										"lg:flex lg:flex-wrap lg:items-start lg:gap-3 lg:space-y-0",
+										"lg:flex lg:max-h-none lg:flex-nowrap lg:items-start lg:gap-3 lg:space-y-0 lg:overflow-x-auto lg:overflow-y-hidden",
 								)}
+								data-testid={`run-board-list-${status}`}
 							>
 								{items.length > 0 ? (
 									items.map((item) => {
@@ -263,6 +264,7 @@ const RunBoardPage = () => {
 											<Card
 												className={cn(
 													"h-48 w-[18rem] max-w-full overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-none transition-colors hover:border-hairline-strong",
+													layout === "horizontal" && "lg:shrink-0",
 												)}
 												key={item.id}
 												role="article"

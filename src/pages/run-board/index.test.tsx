@@ -138,6 +138,41 @@ describe("RunBoardPage", () => {
 		expect(board).toHaveAttribute("data-layout", "horizontal");
 	});
 
+	// Verifies that a vertical status column scrolls instead of growing with every task.
+	it("bounds vertical status columns with internal scrolling", () => {
+		render(<RunBoardPage />);
+
+		const runningList = screen.getByTestId("run-board-list-running");
+
+		expect(runningList).toHaveClass(
+			"max-h-[60vh]",
+			"overflow-y-auto",
+			"overscroll-contain",
+		);
+	});
+
+	// Verifies that horizontal rows keep one line and scroll sideways for extra cards.
+	it("scrolls horizontal status rows sideways", async () => {
+		const user = userEvent.setup();
+		render(<RunBoardPage />);
+
+		await user.click(
+			screen.getByRole("button", {
+				name: "水平面板",
+			}),
+		);
+		const runningList = screen.getByTestId("run-board-list-running");
+
+		expect(runningList).toHaveClass(
+			"lg:flex-nowrap",
+			"lg:overflow-x-auto",
+			"lg:overflow-y-hidden",
+		);
+		expect((await screen.findAllByRole("article"))[0]).toHaveClass(
+			"lg:shrink-0",
+		);
+	});
+
 	// Verifies that both icon-only board layout controls expose their meaning.
 	it("describes both layout controls on hover", async () => {
 		const user = userEvent.setup();
