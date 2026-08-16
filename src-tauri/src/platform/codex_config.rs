@@ -2,10 +2,6 @@ use crate::utils::debounce::EventDebouncer;
 use notify::{recommended_watcher, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-
-const CONFIG_CHANGE_QUIET_PERIOD: Duration = Duration::from_millis(300);
-const CONFIG_CHANGE_MAXIMUM_DELAY: Duration = Duration::from_secs(1);
 
 /// Native outcomes relevant to the Codex runtime-defaults cache.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,11 +38,9 @@ impl CodexConfigWatcher {
 
         let on_event = Arc::new(on_event);
         let debounced_on_event = Arc::clone(&on_event);
-        let (debouncer, debounce_trigger) = EventDebouncer::start(
-            CONFIG_CHANGE_QUIET_PERIOD,
-            CONFIG_CHANGE_MAXIMUM_DELAY,
-            move || debounced_on_event(CodexConfigWatchEvent::Changed),
-        )
+        let (debouncer, debounce_trigger) = EventDebouncer::start(move || {
+            debounced_on_event(CodexConfigWatchEvent::Changed);
+        })
         .map_err(notify::Error::io)?;
 
         let mut watcher = recommended_watcher(move |result: notify::Result<Event>| match result {

@@ -4,6 +4,8 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const EVENT_QUEUE_CAPACITY: usize = 1;
+const QUIET_PERIOD: Duration = Duration::from_millis(300);
+const MAXIMUM_DELAY: Duration = Duration::from_secs(1);
 
 /// Indicates that the debounce worker has already stopped accepting change signals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,14 +40,12 @@ pub(crate) struct EventDebouncer {
 }
 
 impl EventDebouncer {
-    /// Starts a worker that runs `on_batch` after changes settle or reach `maximum_delay`.
+    /// Starts a worker that runs `on_batch` after changes settle or reach the maximum delay.
     ///
-    /// The returned trigger is cloned into event producers. For example, with a 300 ms quiet
-    /// period and a one-second maximum delay, several rapid calls to `signal_change` produce one
-    /// callback after the burst, while continuous calls still produce a callback every second.
+    /// The returned trigger is cloned into event producers. Several rapid calls to
+    /// `signal_change` produce one callback after 300 milliseconds of silence, while continuous
+    /// calls still produce a callback at least once per second.
     pub(crate) fn start(
-        quiet_period: Duration,
-        maximum_delay: Duration,
         on_batch: impl FnMut() + Send + 'static,
     ) -> io::Result<(Self, DebounceTrigger)> {
         let (sender, receiver) = mpsc::sync_channel(EVENT_QUEUE_CAPACITY);
@@ -55,7 +55,7 @@ impl EventDebouncer {
         let worker = thread::Builder::new()
             .name("event-debouncer".to_string())
             .spawn(move || {
-                run_debounce_worker(receiver, quiet_period, maximum_delay, on_batch);
+                run_debounce_worker(receiver, on_batch);
             })?;
 
         Ok((
@@ -164,14 +164,15 @@ impl DebounceSchedule {
     }
 }
 
+impl Default for DebounceSchedule {
+    fn default() -> Self {
+        Self::new(QUIET_PERIOD, MAXIMUM_DELAY)
+    }
+}
+
 /// Receives change signals until shutdown and executes one callback for each settled batch.
-fn run_debounce_worker(
-    receiver: Receiver<DebounceMessage>,
-    quiet_period: Duration,
-    maximum_delay: Duration,
-    mut on_batch: impl FnMut(),
-) {
-    let mut schedule = DebounceSchedule::new(quiet_period, maximum_delay);
+fn run_debounce_worker(receiver: Receiver<DebounceMessage>, mut on_batch: impl FnMut()) {
+    let mut schedule = DebounceSchedule::default();
 
     loop {
         match receiver.recv() {
@@ -201,6 +202,36 @@ fn run_debounce_worker(
 mod tests {
     use super::{DebounceDecision, DebounceSchedule};
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn default_schedule_uses_the_shared_timing_policy() {
+        let start = Instant::now();
+        let mut schedule = DebounceSchedule::default();
+        schedule.record_change(start);
+
+        assert_eq!(
+            schedule.decision_at(start + Duration::from_millis(299)),
+            DebounceDecision::Wait(Duration::from_millis(1))
+        );
+        assert_eq!(
+            schedule.decision_at(start + Duration::from_millis(300)),
+            DebounceDecision::Run
+        );
+
+        let mut continuous_schedule = DebounceSchedule::default();
+        continuous_schedule.record_change(start);
+        continuous_schedule.record_change(start + Duration::from_millis(300));
+        continuous_schedule.record_change(start + Duration::from_millis(600));
+        continuous_schedule.record_change(start + Duration::from_millis(900));
+        assert_eq!(
+            continuous_schedule.decision_at(start + Duration::from_millis(999)),
+            DebounceDecision::Wait(Duration::from_millis(1))
+        );
+        assert_eq!(
+            continuous_schedule.decision_at(start + Duration::from_secs(1)),
+            DebounceDecision::Run
+        );
+    }
 
     #[test]
     fn waits_until_the_latest_change_has_been_quiet() {
