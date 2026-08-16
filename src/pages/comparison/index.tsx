@@ -3,7 +3,7 @@ import { Button, Card, TextArea, Toast } from "@heroui/react";
 import type { TFunction } from "i18next";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { checkAgentProcesses } from "@/api/agent";
+import { checkAgentProcesses, onAgentProcessStatesChanged } from "@/api/agent";
 import {
 	checkClaudeLogin,
 	onClaudeConfigChanged,
@@ -95,20 +95,6 @@ const areRuntimeStatusesEqual = (
 	left.authenticationMethod === right.authenticationMethod &&
 	left.model === right.model &&
 	left.reasoningEffort === right.reasoningEffort;
-
-/**
- * Compares one complete running-process snapshot.
- *
- * @example
- * areProcessStatesEqual(previousProcesses, nextProcesses);
- */
-const areProcessStatesEqual = (
-	left: AgentProcessStates,
-	right: AgentProcessStates,
-) =>
-	left.claude === right.claude &&
-	left.codex === right.codex &&
-	left.workbuddy === right.workbuddy;
 
 /**
  * Resolves a product's selectable state from its live login and process probes.
@@ -205,9 +191,6 @@ const ComparisonPage = () => {
 		workbuddy: { status: "idle" },
 	});
 	const loginStatesRef = useRef(loginStates);
-	const processStateRef = useRef(processState);
-	const activeLoginProbeCountRef = useRef(0);
-	const refreshProcessesAfterLoginRef = useRef<() => void>(() => {});
 	const isRunning = Object.values(runStates).some(
 		(state) => state.status === "running",
 	);
@@ -228,7 +211,6 @@ const ComparisonPage = () => {
 			}
 
 			pendingAgents.add(agent);
-			activeLoginProbeCountRef.current += 1;
 			AGENT_LOGIN_CHECKS[agent]()
 				.then((value) => {
 					if (isActive) {
@@ -259,13 +241,8 @@ const ComparisonPage = () => {
 				})
 				.finally(() => {
 					pendingAgents.delete(agent);
-					activeLoginProbeCountRef.current -= 1;
 					if (isActive && queuedAgents.delete(agent)) {
 						refreshLoginState(agent);
-						return;
-					}
-					if (activeLoginProbeCountRef.current === 0) {
-						refreshProcessesAfterLoginRef.current();
 					}
 				});
 		};
@@ -312,45 +289,48 @@ const ComparisonPage = () => {
 
 	useEffect(() => {
 		let isActive = true;
-		let isChecking = false;
 
-		/** Refreshes the local process snapshot outside authentication probe windows. */
-		const refreshAgentProcesses = async () => {
-			if (isChecking || activeLoginProbeCountRef.current > 0) {
+		/**
+		 * Applies one native process snapshot while the comparison page remains mounted.
+		 *
+		 * @example
+		 * applyProcessStates({ claude: false, codex: true, workbuddy: false });
+		 */
+		const applyProcessStates = (value: AgentProcessStates) => {
+			if (!isActive) {
 				return;
 			}
-			isChecking = true;
-			try {
-				const value = await checkAgentProcesses();
-				if (isActive) {
-					const previous = processStateRef.current;
-					if (
-						previous.status === "resolved" &&
-						areProcessStatesEqual(previous.value, value)
-					) {
-						return;
-					}
-					const next: ProcessState = { status: "resolved", value };
-					processStateRef.current = next;
-					setProcessState(next);
-				}
-			} catch {
-				if (isActive && processStateRef.current.status === "checking") {
-					const next: ProcessState = { status: "failed" };
-					processStateRef.current = next;
-					setProcessState(next);
-				}
-			} finally {
-				isChecking = false;
-			}
+			setProcessState({ status: "resolved", value });
 		};
 
-		refreshProcessesAfterLoginRef.current = refreshAgentProcesses;
-		refreshAgentProcesses();
+		const stopListening = onAgentProcessStatesChanged(applyProcessStates);
+		stopListening
+			.then(() => checkAgentProcesses())
+			.then((value) => {
+				if (!isActive) {
+					return;
+				}
+				setProcessState((current) =>
+					current.status === "checking"
+						? { status: "resolved", value }
+						: current,
+				);
+			})
+			.catch(() => {
+				if (!isActive) {
+					return;
+				}
+				setProcessState((current) =>
+					current.status === "checking" ? { status: "failed" } : current,
+				);
+			});
 
 		return () => {
 			isActive = false;
-			refreshProcessesAfterLoginRef.current = () => {};
+			stopListening.then(
+				(stop) => stop(),
+				() => {},
+			);
 		};
 	}, []);
 
