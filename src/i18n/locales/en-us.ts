@@ -117,38 +117,6 @@ const enUS = {
 				finish: "Completed successfully",
 				error: "Needs attention",
 			},
-			items: {
-				repositoryAudit: {
-					title: "Repository architecture audit",
-					description:
-						"Map module boundaries and flag highly coupled code paths.",
-				},
-				releaseNotes: {
-					title: "Generate release notes",
-					description:
-						"Summarize this week's commits into a user-facing update.",
-				},
-				apiComparison: {
-					title: "API performance comparison",
-					description:
-						"Compare response latency and token use across three agents.",
-				},
-				testCoverage: {
-					title: "Test coverage analysis",
-					description:
-						"Find critical business branches without regression coverage.",
-				},
-				migrationPlan: {
-					title: "Database migration plan",
-					description:
-						"The target database version is required before migration steps can continue.",
-				},
-				dependencyScan: {
-					title: "Dependency security scan",
-					description:
-						"The dependency manifest failed to parse; the lockfile needs an update.",
-				},
-			},
 		},
 	},
 } as const;
