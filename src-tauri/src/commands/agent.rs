@@ -1,7 +1,8 @@
-use crate::adapters::process::{AgentProcessStates, SystemAgentProcessAdapter};
-use crate::error::{AppError, IpcError};
-use crate::services::process::check_agent_processes as resolve_agent_processes;
+use crate::adapters::process::AgentProcessStates;
+use crate::error::IpcError;
+use crate::services::process::AgentProcessMonitor;
 use serde::Serialize;
+use tauri::State;
 
 /// Running-state snapshot for every supported local Agent product.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -25,12 +26,10 @@ impl From<AgentProcessStates> for AgentProcessStatesResponse {
     }
 }
 
-/// Reads a lightweight process snapshot without rerunning authentication probes.
+/// Reads the latest process snapshot retained by the application-wide monitor.
 #[tauri::command]
-pub async fn check_agent_processes() -> Result<AgentProcessStatesResponse, IpcError> {
-    tauri::async_runtime::spawn_blocking(|| resolve_agent_processes(&SystemAgentProcessAdapter))
-        .await
-        .map_err(|_| IpcError::from(AppError::WorkerFailed))?
-        .map(Into::into)
-        .map_err(Into::into)
+pub fn check_agent_processes(
+    monitor: State<'_, AgentProcessMonitor>,
+) -> Result<AgentProcessStatesResponse, IpcError> {
+    monitor.current_states().map(Into::into).map_err(Into::into)
 }

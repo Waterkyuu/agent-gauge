@@ -36,14 +36,20 @@ mod services {
 
 use crate::adapters::claude::ClaudeRuntimeSettingsCache;
 use crate::adapters::codex::CodexRuntimeDefaultsCache;
+use crate::adapters::process::SystemAgentProcessAdapter;
+use crate::commands::agent::AgentProcessStatesResponse;
 use crate::platform::claude_config::{
     claude_settings_path, ClaudeConfigWatchEvent, ClaudeConfigWatcher,
 };
 use crate::platform::codex_config::{
     codex_config_paths, CodexConfigWatchEvent, CodexConfigWatcher,
 };
+use crate::services::process::AgentProcessMonitor;
+use std::time::Duration;
 use tauri::{Emitter, Manager};
 
+const AGENT_PROCESS_STATES_CHANGED_EVENT: &str = "agent-process-states-changed";
+const AGENT_PROCESS_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 const CODEX_CONFIG_CHANGED_EVENT: &str = "codex-config-changed";
 const CLAUDE_CONFIG_CHANGED_EVENT: &str = "claude-config-changed";
 
@@ -62,6 +68,20 @@ pub fn run() {
             let main_window = app
                 .get_webview_window("main")
                 .ok_or_else(|| std::io::Error::other("main window is unavailable"))?;
+            let process_window = main_window.clone();
+            let process_monitor = AgentProcessMonitor::start(
+                SystemAgentProcessAdapter::default(),
+                AGENT_PROCESS_REFRESH_INTERVAL,
+                move |states| {
+                    let _ = process_window.emit(
+                        AGENT_PROCESS_STATES_CHANGED_EVENT,
+                        AgentProcessStatesResponse::from(states),
+                    );
+                },
+            )
+            .map_err(|_| std::io::Error::other("process monitor failed to start"))?;
+            app.manage(process_monitor);
+
             let callback_cache = runtime_defaults_cache.clone();
             let callback_window = main_window.clone();
             let watcher = CodexConfigWatcher::start(codex_config_paths(), move |event| {
