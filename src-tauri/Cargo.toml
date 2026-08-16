@@ -27,3 +27,6 @@ leveldb-forensic = "0.1.2"
 notify = "8.2.0"
 toml = "1.1.4"
 sysinfo = "0.39.6"
+sea-orm = { version = "2.0.2", default-features = false, features = ["macros", "runtime-tokio", "sqlx-sqlite"] }
+sea-orm-migration = { version = "2.0.2", default-features = false, features = ["runtime-tokio", "sqlx-sqlite"] }
+tokio = { version = "1", features = ["fs"] }
