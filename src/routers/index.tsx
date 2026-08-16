@@ -28,7 +28,7 @@ const RouteLoadingFallback = () => {
 			<div className="motion-safe:animate-pulse">
 				<div className="h-4 w-48 rounded-full bg-hairline" />
 				<div className="mt-5 h-10 max-w-2xl rounded-full bg-hairline" />
-				<div className="mt-4 h-5 max-w-xl rounded-full bg-hairline" />
+				<div className="mt-4 h-5 max-w-[36rem] rounded-full bg-hairline" />
 			</div>
 		</main>
 	);
