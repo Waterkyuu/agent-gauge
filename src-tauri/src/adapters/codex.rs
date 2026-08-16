@@ -365,7 +365,8 @@ struct TokenUsageBreakdown {
     input_tokens: u64,
     /// Input tokens served from an existing cache entry.
     cached_input_tokens: u64,
-    /// Input tokens written into the prompt cache, or zero when the source omits this metric.
+    /// Input tokens written into the prompt cache.
+    /// Codex CLI 0.144.3 no longer returns `cacheWriteInputTokens`, so its absence defaults to zero.
     #[serde(default)]
     cache_write_input_tokens: u64,
     /// Tokens generated in the model output.
