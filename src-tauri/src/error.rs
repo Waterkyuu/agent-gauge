@@ -22,6 +22,9 @@ pub(crate) enum AppError {
     WorkBuddyTaskFailed,
     WorkBuddyTimedOut,
     InvalidQuery,
+    InvalidComparison,
+    ComparisonDatabaseFailed,
+    ComparisonNotFound,
     WorkerFailed,
 }
 
@@ -117,6 +120,18 @@ impl From<AppError> for IpcError {
             AppError::InvalidQuery => Self {
                 code: "INVALID_QUERY",
                 message: "任务内容不能为空且不能超过 16000 个字符。",
+            },
+            AppError::InvalidComparison => Self {
+                code: "INVALID_COMPARISON",
+                message: "对比记录包含无效或重复的数据。",
+            },
+            AppError::ComparisonDatabaseFailed => Self {
+                code: "COMPARISON_DATABASE_FAILED",
+                message: "无法访问本地历史对比数据库。",
+            },
+            AppError::ComparisonNotFound => Self {
+                code: "COMPARISON_NOT_FOUND",
+                message: "未找到对应的历史对比记录。",
             },
             AppError::WorkerFailed => Self {
                 code: "WORKER_FAILED",
