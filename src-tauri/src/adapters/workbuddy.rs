@@ -32,6 +32,15 @@ struct WorkBuddyGlobalSelection {
     reasoning_effort: Option<String>,
 }
 
+/// Model configuration read from WorkBuddy's LevelDB-backed Local Storage.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct WorkBuddyConfigSnapshot {
+    /// Model identifier selected for newly created WorkBuddy tasks.
+    pub(crate) model: Option<String>,
+    /// Effective thinking level derived from the selected model configuration.
+    pub(crate) reasoning_effort: Option<String>,
+}
+
 impl WorkBuddyGlobalSelection {
     fn thought_level(&self) -> &str {
         if !self.is_thinking {
@@ -45,7 +54,7 @@ impl WorkBuddyGlobalSelection {
 fn global_selection_from_local_storage(
     records: &[LocalStorageRecord],
 ) -> Option<WorkBuddyGlobalSelection> {
-    let (_, value) = records
+    let (_, deleted, value) = records
         .iter()
         .filter_map(|record| match record {
             LocalStorageRecord::Data {
@@ -54,26 +63,28 @@ fn global_selection_from_local_storage(
                 value,
                 seq,
                 deleted,
-            } if !deleted
-                && origin == "file://"
+            } if origin == "file://"
                 && !script_key.lossy
-                && !value.lossy
                 && (script_key.text == WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX
                     || script_key
                         .text
                         .strip_prefix(WORKBUDDY_GLOBAL_MODEL_KEY_PREFIX)
                         .is_some_and(|suffix| suffix.starts_with(':'))) =>
             {
-                Some((*seq, value.text.as_str()))
+                Some((*seq, *deleted, value))
             }
             _ => None,
         })
-        .max_by_key(|(seq, _)| *seq)?;
+        .max_by_key(|(seq, _, _)| *seq)?;
 
-    serde_json::from_str(value).ok()
+    if deleted || value.lossy {
+        return None;
+    }
+
+    serde_json::from_str(&value.text).ok()
 }
 
-fn workbuddy_local_storage_path() -> Option<PathBuf> {
+pub(crate) fn workbuddy_local_storage_path() -> Option<PathBuf> {
     dirs::home_dir().map(|home| {
         home.join(".workbuddy-ai")
             .join("app")
@@ -129,12 +140,36 @@ fn is_bounded_workbuddy_local_storage(path: &Path) -> bool {
 
 fn read_workbuddy_global_selection() -> Option<WorkBuddyGlobalSelection> {
     let path = workbuddy_local_storage_path()?;
-    if !is_bounded_workbuddy_local_storage(&path) {
-        return None;
-    }
-    let records = decode_local_storage(&path).ok()?;
+    read_workbuddy_global_selection_from_path(&path).ok()?
+}
 
-    global_selection_from_local_storage(&records)
+fn read_workbuddy_global_selection_from_path(
+    path: &Path,
+) -> Result<Option<WorkBuddyGlobalSelection>, AppError> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    if !is_bounded_workbuddy_local_storage(path) {
+        return Err(AppError::WorkBuddyConfigReadFailed);
+    }
+    let records = decode_local_storage(path).map_err(|_| AppError::WorkBuddyConfigReadFailed)?;
+
+    Ok(global_selection_from_local_storage(&records))
+}
+
+/// Reads the model and thinking level currently selected for new WorkBuddy tasks.
+pub(crate) fn read_workbuddy_config() -> Result<WorkBuddyConfigSnapshot, AppError> {
+    let path = workbuddy_local_storage_path().ok_or(AppError::WorkBuddyConfigReadFailed)?;
+    let selection = read_workbuddy_global_selection_from_path(&path)?;
+
+    Ok(
+        selection.map_or_else(WorkBuddyConfigSnapshot::default, |selection| {
+            WorkBuddyConfigSnapshot {
+                reasoning_effort: Some(selection.thought_level().to_string()),
+                model: Some(selection.id),
+            }
+        }),
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1033,7 +1068,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_latest_global_model_with_default_reasoning() {
+    fn treats_the_latest_global_model_tombstone_as_deleted() {
         let records = vec![
             LocalStorageRecord::Data {
                 origin: "file://".to_string(),
@@ -1088,13 +1123,9 @@ mod tests {
             },
         ];
 
-        let selection = global_selection_from_local_storage(&records)
-            .expect("latest global selection should be parsed");
+        let selection = global_selection_from_local_storage(&records);
 
-        assert_eq!(selection.id, "kimi-k3");
-        assert!(selection.is_thinking);
-        assert_eq!(selection.reasoning_effort, None);
-        assert_eq!(selection.thought_level(), "enabled");
+        assert_eq!(selection, None);
     }
 
     #[test]

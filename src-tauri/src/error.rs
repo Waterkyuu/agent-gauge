@@ -15,6 +15,7 @@ pub(crate) enum AppError {
     CodexTimedOut,
     ProcessProbeFailed,
     WorkBuddyNotInstalled,
+    WorkBuddyConfigReadFailed,
     WorkBuddyProbeFailed,
     WorkBuddyProtocolFailed,
     WorkBuddyNeedsInput,
@@ -88,6 +89,10 @@ impl From<AppError> for IpcError {
             AppError::WorkBuddyNotInstalled => Self {
                 code: "WORKBUDDY_NOT_INSTALLED",
                 message: "未找到本地 WorkBuddy。",
+            },
+            AppError::WorkBuddyConfigReadFailed => Self {
+                code: "WORKBUDDY_CONFIG_READ_FAILED",
+                message: "无法读取本地 WorkBuddy 模型配置。",
             },
             AppError::WorkBuddyProbeFailed => Self {
                 code: "WORKBUDDY_PROBE_FAILED",

@@ -1,9 +1,9 @@
-use crate::adapters::workbuddy::SystemWorkBuddyAdapter;
+use crate::adapters::workbuddy::{read_workbuddy_config, SystemWorkBuddyAdapter};
 use crate::dto::agent::AgentRunResponse;
-use crate::dto::workbuddy::WorkBuddyLoginStatus;
+use crate::dto::workbuddy::{WorkBuddyConfigStatus, WorkBuddyLoginStatus};
 use crate::error::{AppError, IpcError};
 use crate::services::agent::run_agent_task;
-use crate::services::workbuddy::check_workbuddy_login as resolve_workbuddy_login;
+use crate::services::workbuddy::check_workbuddy_login as check_workbuddy_login_service;
 use serde::Deserialize;
 
 /// User input accepted by the WorkBuddy task command.
@@ -17,9 +17,19 @@ pub struct RunWorkBuddyTaskRequest {
 /// Checks whether the locally installed WorkBuddy runtime has an active account.
 #[tauri::command]
 pub async fn check_workbuddy_login() -> Result<WorkBuddyLoginStatus, IpcError> {
-    tauri::async_runtime::spawn_blocking(|| resolve_workbuddy_login(&SystemWorkBuddyAdapter))
+    tauri::async_runtime::spawn_blocking(|| check_workbuddy_login_service(&SystemWorkBuddyAdapter))
         .await
         .map_err(|_| IpcError::from(AppError::WorkerFailed))?
+        .map_err(Into::into)
+}
+
+/// Reads the current WorkBuddy model configuration without starting its ACP runtime.
+#[tauri::command]
+pub async fn check_workbuddy_config() -> Result<WorkBuddyConfigStatus, IpcError> {
+    tauri::async_runtime::spawn_blocking(read_workbuddy_config)
+        .await
+        .map_err(|_| IpcError::from(AppError::WorkerFailed))?
+        .map(Into::into)
         .map_err(Into::into)
 }
 
