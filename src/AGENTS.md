@@ -187,7 +187,7 @@ cn("px-2 py-1", isActive && "px-4", { "text-red-500": hasError });
 ### Comments
 
 1. Every function added or substantially rewritten by AI must include a comment. This requirement includes React components, hooks, utility functions, event handlers, and rendering helpers.
-2. Comments must explain the function's purpose.
+2. Comments must explain why the code is written this way, including the intent, constraints, or tradeoffs behind it. Do not merely translate or restate what the code does.
 3. Comments must include a usage example. Use JSX for component examples and TypeScript for hook and utility function examples. A usage example is not required when the function has no parameters.
 4. Keep examples concise and show the smallest usable invocation. Avoid lengthy business explanations.
 5. Never add emojis to comments.
