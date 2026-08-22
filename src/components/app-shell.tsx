@@ -105,7 +105,9 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 						<nav aria-label={t("mainNavigation")} className="mt-8 space-y-xs">
 							{NAVIGATION_ITEMS.map((item) => {
 								const ItemIcon = item.icon;
-								const isActive = currentPath === item.path;
+								const isActive =
+									currentPath === item.path ||
+									currentPath.startsWith(`${item.path}/`);
 
 								return (
 									<Button
@@ -173,13 +175,16 @@ const AppShell = ({ currentPath, children, onNavigate }: AppShellProps) => {
 				>
 					{NAVIGATION_ITEMS.map((item) => {
 						const ItemIcon = item.icon;
+						const isActive =
+							currentPath === item.path ||
+							currentPath.startsWith(`${item.path}/`);
 
 						return (
 							<Button
 								aria-label={t(item.labelKey)}
 								className={cn(
 									"rounded-lg text-body shadow-none",
-									currentPath === item.path && "bg-hairline text-ink",
+									isActive && "bg-hairline text-ink",
 								)}
 								isIconOnly
 								key={item.path}

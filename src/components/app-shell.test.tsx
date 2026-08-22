@@ -16,4 +16,18 @@ describe("AppShell", () => {
 
 		expect(onNavigate).toHaveBeenCalledWith("/comparison-history");
 	});
+
+	it("keeps comparison history navigation active on a detail route", () => {
+		render(
+			<AppShell currentPath="/comparison-history/42" onNavigate={vi.fn()}>
+				<main>content</main>
+			</AppShell>,
+		);
+
+		for (const historyButton of screen.getAllByRole("button", {
+			name: "历史对比",
+		})) {
+			expect(historyButton).toHaveClass("bg-hairline");
+		}
+	});
 });

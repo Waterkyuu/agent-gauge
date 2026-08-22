@@ -48,6 +48,10 @@ const RoutedApplication = () => {
 						element={<ComparisonHistoryPage />}
 						path="/comparison-history"
 					/>
+					<Route
+						element={<ComparisonHistoryPage />}
+						path="/comparison-history/:comparisonId"
+					/>
 					<Route element={<RunBoardPage />} path="/runs" />
 					<Route element={<Navigate replace to="/" />} path="*" />
 				</Routes>
