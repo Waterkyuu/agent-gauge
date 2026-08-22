@@ -7,8 +7,10 @@ const enUS = {
 		expandSidebar: "Expand sidebar",
 		loadingPage: "Loading page",
 		common: {
+			cancel: "Cancel",
 			search: "Search",
 			clearSearch: "Clear search",
+			confirm: "Confirm",
 		},
 		navigation: {
 			compare: "Compare",
@@ -90,7 +92,15 @@ const enUS = {
 			emptyTitle: "No comparison history yet",
 			emptyDescription:
 				"Complete a performance comparison and its results will appear here automatically.",
-			selectPrompt: "Select a history record to view its complete result.",
+			backToList: "Back to comparison records",
+			recordActions: "More actions for {{query}}",
+			rename: "Rename",
+			renameTitle: "Rename record",
+			renameDescription: 'Set a new record name for "{{query}}".',
+			delete: "Delete",
+			deleteTitle: "Delete record?",
+			deleteDescription: 'Confirm deletion of the "{{query}}" history record.',
+			deleteConfirm: "Delete",
 			loadMore: "Load more",
 			saveFailed:
 				"The results finished, but comparison history could not be saved.",
