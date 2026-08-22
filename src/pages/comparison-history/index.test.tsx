@@ -90,8 +90,18 @@ describe("ComparisonHistoryPage", () => {
 		apiMocks.getComparisonHistory.mockResolvedValue(DETAIL);
 	});
 
-	it("loads the newest comparison and renders its complete result", async () => {
+	it("waits for a history row selection before loading its detail", async () => {
 		renderHistoryPage();
+		const newestRow = await screen.findByRole("button", {
+			name: /检查第二次性能/,
+		});
+
+		expect(
+			screen.getByText("选择一条历史记录查看完整结果。"),
+		).toBeInTheDocument();
+		expect(apiMocks.getComparisonHistory).not.toHaveBeenCalled();
+
+		fireEvent.click(newestRow);
 
 		expect(await screen.findByText("历史响应")).toBeInTheDocument();
 		expect(apiMocks.getComparisonHistory).toHaveBeenCalledWith(2);
@@ -100,9 +110,11 @@ describe("ComparisonHistoryPage", () => {
 
 	it("loads another detail when its history row is selected", async () => {
 		renderHistoryPage();
-		await screen.findByText("历史响应");
+		const previousRow = await screen.findByRole("button", {
+			name: /检查第一次性能/,
+		});
 
-		fireEvent.click(screen.getByRole("button", { name: /检查第一次性能/ }));
+		fireEvent.click(previousRow);
 
 		await waitFor(() => {
 			expect(apiMocks.getComparisonHistory).toHaveBeenLastCalledWith(1);
@@ -124,6 +136,11 @@ describe("ComparisonHistoryPage", () => {
 
 	it("reuses a cached detail when a previously selected row is opened again", async () => {
 		renderHistoryPage();
+		const newestRow = await screen.findByRole("button", {
+			name: /检查第二次性能/,
+		});
+
+		fireEvent.click(newestRow);
 		await screen.findByText("历史响应");
 
 		fireEvent.click(screen.getByRole("button", { name: /检查第一次性能/ }));

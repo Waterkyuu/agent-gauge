@@ -5,7 +5,7 @@ import {
 } from "@gravity-ui/icons";
 import { Button, Skeleton } from "@heroui/react";
 import { cn } from "cnfast";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentLogo } from "@/components/agent-logo";
 import { AgentComparisonCard } from "@/pages/comparison/components/agent-comparison-card";
@@ -26,12 +26,6 @@ const ComparisonHistoryPage = () => {
 	const historyItems =
 		historyQuery.data?.pages.flatMap((page) => page.items) ?? [];
 	const numberLocale = i18n.resolvedLanguage ?? "en-US";
-
-	useEffect(() => {
-		if (selectedId === null && historyItems[0]) {
-			setSelectedId(historyItems[0].id);
-		}
-	}, [historyItems, selectedId]);
 
 	/**
 	 * Selects a history row; React Query resolves its cached or persisted detail.
