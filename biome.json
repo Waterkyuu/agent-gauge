@@ -1,9 +1,17 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
-	"vcs": {
-		"enabled": true,
-		"clientKind": "git",
-		"useIgnoreFile": true
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		},
+		"enabled": true
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
 	},
 	"files": {
 		"ignoreUnknown": false
@@ -12,28 +20,32 @@
 		"enabled": true,
 		"indentStyle": "tab"
 	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double"
+		}
+	},
 	"linter": {
 		"enabled": true,
 		"rules": {
 			"preset": "recommended"
 		}
 	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double"
+	"overrides": [
+		{
+			"assist": {
+				"actions": {
+					"source": {
+						"useSortedKeys": "on"
+					}
+				}
+			},
+			"includes": ["**/*.json", "**/*.jsonc"]
 		}
-	},
-	"css": {
-		"parser": {
-			"tailwindDirectives": true
-		}
-	},
-	"assist": {
+	],
+	"vcs": {
+		"clientKind": "git",
 		"enabled": true,
-		"actions": {
-			"source": {
-				"organizeImports": "on"
-			}
-		}
+		"useIgnoreFile": true
 	}
 }

@@ -1,26 +1,4 @@
 {
-	"name": "theoria",
-	"private": true,
-	"version": "0.1.0",
-	"packageManager": "pnpm@11.10.0",
-	"type": "module",
-	"scripts": {
-		"dev": "vite",
-		"build": "pnpm typecheck && vite build",
-		"check": "biome check .",
-		"check:fix": "biome check --write .",
-		"format": "biome format .",
-		"format:fix": "biome format --write .",
-		"lint": "biome lint .",
-		"lint:staged": "lint-staged",
-		"preview": "vite preview",
-		"test": "vitest run",
-		"test:coverage": "vitest run --coverage",
-		"test:watch": "vitest",
-		"typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
-		"prepare": "husky",
-		"tauri": "tauri"
-	},
 	"dependencies": {
 		"@gravity-ui/icons": "^2.21.0",
 		"@heroui/react": "^3.2.3",
@@ -55,5 +33,27 @@
 		"typescript": "~5.8.3",
 		"vite": "^7.0.4",
 		"vitest": "^4.1.10"
-	}
+	},
+	"name": "theoria",
+	"packageManager": "pnpm@11.10.0",
+	"private": true,
+	"scripts": {
+		"build": "pnpm typecheck && vite build",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"dev": "vite",
+		"format": "biome format .",
+		"format:fix": "biome format --write .",
+		"lint": "biome lint .",
+		"lint:staged": "lint-staged",
+		"prepare": "husky",
+		"preview": "vite preview",
+		"tauri": "tauri",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit"
+	},
+	"type": "module",
+	"version": "0.1.0"
 }
